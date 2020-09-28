@@ -7,14 +7,12 @@
       "name": "Test1",
       "category": "Utility",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/xxx-driver.json",
-      "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/xxx-driver.json",
       "description": "Test integration 1"
     },
     {
       "name": "Test2",
       "category": "Utility",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/xxx-driver.json",
-      "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/xxx-driver.json",
       "description": "Test integration 2"
     }
   ]
