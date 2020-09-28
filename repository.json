@@ -4,10 +4,10 @@
   "payPalUrl": "https://paypal.me/cjcharles",
   "packages": [
     {
-      "name": "Test1",
-      "category": "Utility",
-      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/xxx-driver.json",
-      "description": "Test integration 1"
+      "name": "Alarm Bridge",
+      "category": "Security",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/alarm-bridge-package.json",
+      "description": "Alarm bridge device for Visonic, Elk and GE/Networx"
     },
     {
       "name": "Test2",
