@@ -3,7 +3,6 @@
   "minimumHEVersion": "1.1",
   "author": "Cjcharles0",
   "dateReleased": "2020-09-28",
-  "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/packageManifestBeta.json",
   "documentationLink": "https://github.com/cjcharles0/Hubitat",
   "communityLink": "https://community.hubitat.com/t/thread-url-here",
   "apps": [
