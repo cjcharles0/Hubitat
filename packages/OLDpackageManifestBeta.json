@@ -1,3 +1,6 @@
+//This needs adding to the main packageManifest.json and then also to packages.json if making a beta channel
+  "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/packageManifestBeta.json",
+
 {
   "packageName": "Test Integration 1",
   "minimumHEVersion": "1.1",
