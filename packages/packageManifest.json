@@ -3,7 +3,7 @@
   "minimumHEVersion": "1.1",
   "author": "Cjcharles0",
   "dateReleased": "2020-09-28",
-  "betaLocation": "https://raw.githubusercontent.com/xxx/Hubitat/master/packageManifestBeta.json",
+  "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/packageManifestBeta.json",
   "documentationLink": "https://github.com/cjcharles0/Hubitat",
   "communityLink": "https://community.hubitat.com/t/thread-url-here",
   "apps": [
@@ -16,7 +16,7 @@
       "name": "Test - Parent",
       "betaVersion": "v1.1",
       "namespace": "test",
-      "location": "https://raw.githubusercontent.com/xxx/Hubitat/drivers/alarm/parent.groovy",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm/parent.groovy",
       "required": true
     },
     {
@@ -25,7 +25,7 @@
       "name": "Test - Child",
       "betaVersion": "v1.1",
       "namespace": "test",
-      "location": "https://raw.githubusercontent.com/xxx/Hubitat/drivers/alarm/child.groovy",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm/child.groovy",
       "required": false
     }
   ],
