@@ -1,0 +1,20 @@
+{
+  "author": "Markus",
+  "gitHubUrl": "https://github.com/markus-li/Hubitat",
+  "packages": [
+    {
+      "name": "Test1",
+      "category": "Utility",
+      "location": "https://raw.githubusercontent.com/xxx/Hubitat/release/packages/xxx-driver.json",
+      "betaLocation": "https://raw.githubusercontent.com/xxx/Hubitat/development/packages/xxx-driver-beta.json",
+      "description": "Test integration 1"
+    },
+    {
+      "name": "Test2",
+      "category": "Utility",
+      "location": "https://raw.githubusercontent.com/xxx/Hubitat/release/packages/xxx-driver.json",
+      "betaLocation": "https://raw.githubusercontent.com/xxx/Hubitat/development/packages/xxx-driver-beta.json",
+      "description": "Test integration 2"
+    }
+  ]
+}
