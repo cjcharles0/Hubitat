@@ -1,0 +1,23 @@
+{
+  "packageName": "Alarm Bridge",
+  "minimumHEVersion": "1.1",
+  "author": "Cjcharles0",
+  "dateReleased": "2020-09-28",
+  "documentationLink": "https://github.com/cjcharles0/Hubitat",
+  "communityLink": "https://community.hubitat.com/t/thread-url-here",
+  "apps": [
+
+  ],
+  "drivers": [
+    {
+      "id": "daf8333a-3b78-5ad0-af46-1xxxxxxxxxxba",
+      "internalId": 865,
+      "name": "Alarm Bridge Device Parent",
+      "betaVersion": "v1.1",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm-bridge/alarm-bridge-dth.groovy",
+      "required": true
+    }
+  ],
+  "files": []
+}
