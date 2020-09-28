@@ -1,6 +1,7 @@
 {
   "author": "Cjcharles0",
   "gitHubUrl": "https://github.com/cjcharles0/Hubitat",
+  "payPalUrl": "https://paypal.me/cjcharles",
   "packages": [
     {
       "name": "Test1",
