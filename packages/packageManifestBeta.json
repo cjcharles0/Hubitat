@@ -15,7 +15,7 @@
       "name": "Test - Parent",
       "betaVersion": "v1.1",
       "namespace": "test",
-      "betaLocation": "https://raw.githubusercontent.com/xxx/Hubitat/drivers/alarm/parent.groovy",
+      "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/drivers/alarm/parent.groovy",
       "required": true
     },
     {
@@ -24,7 +24,7 @@
       "name": "Test - Child",
       "betaVersion": "v1.1",
       "namespace": "test",
-      "betaLocation": "https://raw.githubusercontent.com/xxx/Hubitat/drivers/alarm/child.groovy",
+      "betaLocation": "https://raw.githubusercontent.com/cjcharles0/Hubitat/drivers/alarm/child.groovy",
       "required": false
     }
   ],
