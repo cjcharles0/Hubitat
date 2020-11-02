@@ -21,7 +21,7 @@ import groovy.json.JsonSlurper
 
 metadata
 {
-	definition (name: "Alarm System Bridge", namespace: "cjcharles0", author: "Chris Charles")
+	definition (name: "Alarm Bridge", namespace: "cjcharles0", author: "Chris Charles")
 	{
 		capability "Refresh"
 		capability "Configuration"
