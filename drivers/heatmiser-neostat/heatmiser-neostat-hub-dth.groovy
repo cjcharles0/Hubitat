@@ -1,5 +1,5 @@
 /**
- *  Copyright 2017 Chris Charles
+ *  Copyright 2020 Chris Charles
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -13,7 +13,7 @@
  *  Neo Hub Bridge (Parent Device of Neo Thermostat)
  *
  *  Author: Chris Charles (cjcharles0)
- *  Date: 2017-04-26
+ *  Date: 2020-09-28
  */
 
 import groovy.json.JsonSlurper
@@ -578,5 +578,5 @@ private String unhexify(String hexStr) {
 }																													
 
 private socketStatus(message) {
-    log.debug message
+    //log.debug message
 }
