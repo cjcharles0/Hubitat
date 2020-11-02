@@ -22,7 +22,7 @@
 import groovy.json.JsonSlurper
 
 metadata {
-	definition (name: "Neo Thermostat Device", namespace: "cjcharles0", author: "Chris Charles")
+	definition (name: "Heatmiser Neo Thermostat", namespace: "cjcharles0", author: "Chris Charles")
     { 
     	capability "Refresh"
         capability "Configuration"
