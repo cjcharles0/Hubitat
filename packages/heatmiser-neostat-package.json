@@ -1,29 +1,25 @@
 {
   "packageName": "Heatmiser Neostat",
-  "minimumHEVersion": "1.1",
   "author": "cjcharles0",
-  "dateReleased": "2020-09-28",
+  "minimumHEVersion": "1.1",
+  "dateReleased": "2020-10-28",
   "version": "1.0",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/heatmiser-neostat",
   "communityLink": "https://community.hubitat.com/t/thread-url-here",
-  "apps": [
-
-  ],
   "drivers": [
     {
-      "id": "daf8333a-3b78-5ad0-af46-14af46af46ba",
-      "name": "Heatmiser Neostat Hub",
+      "id": "2fb0381a-9d4c-4600-81aa-1ea67aada7ad",
+      "name": "Heatmiser Neo Hub Bridge",
       "namespace": "cjcharles0",
-      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neostat-hub-dth.groovy",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neo-hub-dth.groovy",
       "required": true
     },
     {
-      "id": "daf8333a-3b78-5ad0-af46-14af46af46bb",
-      "name": "Heatmiser Neostat Thermostat",
+      "id": "ed0664e4-7584-481f-bb8c-6c64439750d9",
+      "name": "Heatmiser Neo Thermostat",
       "namespace": "cjcharles0",
-      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neostat-thermostat-dth.groovy",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neo-thermostat-dth.groovy",
       "required": true
     }
-  ],
-  "files": []
+  ]
 }
