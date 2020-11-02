@@ -12,7 +12,7 @@
  * 
  */
 metadata {
-	definition (name: "Alarm Child Switch", namespace: "cjcharles0", author: "Chris Charles") {
+	definition (name: "Alarm Bridge Child Switch", namespace: "cjcharles0", author: "Chris Charles") {
 		capability "Switch"
 		//capability "Relay Switch"
 		//capability "PushableButton"
