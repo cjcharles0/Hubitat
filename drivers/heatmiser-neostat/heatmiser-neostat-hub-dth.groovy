@@ -19,7 +19,7 @@
 import groovy.json.JsonSlurper
 
 metadata {
-    definition(name: "Neo Hub Bridge", namespace: "cjcharles0", author: "Chris Charles") {
+    definition(name: "Heatmiser Neo Hub Bridge", namespace: "cjcharles0", author: "Chris Charles") {
         capability "Refresh"
         capability "Configuration"
         capability "Polling"
@@ -158,11 +158,20 @@ metadata {
     details(["lastcommand", "stip", "neoip", "refreships", "configure", "getthermostats", "removethermostats", "holidayOnOrCancel", "decreaseHours", "increaseHours", "decreaseDays", "increaseDays", "allaway", "refresh"])
 }
 
-def refresh() {
+def refresh()
+{
     log.debug "Refreshing all children (done from Bridge)"
-    for (curdevice in getChildDevices()) {
-        log.debug "Requesting updated temperature information for ${curdevice}"
-        curdevice.refresh()
+    def counter = 1
+    def dni
+    getChildDevices().each
+    {
+        dni = it.deviceNetworkId
+        if (dni != null)
+        {
+            log.debug "Requesting updated temperature information (${counter}) for ${dni}"
+            it.refreshdelay(counter * 5)
+            counter = counter + 1
+        }
     }
 }
 def installed() {
@@ -175,7 +184,6 @@ def uninstalled() {
 }
 def updated() {
     log.debug "updated()"
-    refreshipaddresses()
     state.holidaydays = 0
     state.holidayhours = 0
     if (enable_debug) {
@@ -201,8 +209,7 @@ private getthermostats() {
     def cmds = []
     removethermostats()
     log.debug "Requesting List of Thermostats"
-    state.lastmessage = "Get zones"
-    cmds << getAction("{\"GET_ZONES\":0}")
+    cmds << getAction("{\"GET_ZONES\":0}", "getzones")
     return cmds
 }
 private removethermostats() {
@@ -224,13 +231,13 @@ private removethermostats() {
 def setAllAwayOn() {
     log.debug "Setting all Thermostats to Away"
     sendEvent(name: "allaway", value: "on", isStateChange: true)
-    getAction("{\"AWAY_ON\":0}")
+    getAction("{\"AWAY_ON\":0}", "hub")
 }
 def setAllAwayOff() {
     //def cmds = []
     log.debug "Setting all Thermostats to Home"
     sendEvent(name: "allaway", value: "off", isStateChange: true)
-    getAction("{\"AWAY_OFF\":0}")
+    getAction("{\"AWAY_OFF\":0}", "hub")
 }
 
 //This function helps control debug printing
@@ -239,190 +246,231 @@ def childGetDebugState() {
     else return false
 }
 
+def getDeviceIDfromDNI(dni)
+{
+    //Get back to the device ID (Neostat name) from the device ID (child device DNI)
+    return dni.replaceAll("neostat", "") //.replaceAll(".", " ")
+}
+
 //These functions can be called by the children in order to request something from the bridge
 def childRequestingRefresh(String dni) {
     //Send Refresh command - this will occur for all thermostats, not just the one which requested it
-    state.lastmessage = "Refresh zone"
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     if (state.debug) log.debug "Requesting refreshed info for ${dni}"
-    getAction("{\"INFO\":\"${deviceid}\"}")
+    getAction("{\"INFO\":\"${deviceid}\"}", dni)
 }
 def childAwayOn(String dni) {
     //Do not use, use FrontOn instead
     //Send Child Away on command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting away mode on for child ${deviceid}"
-    getAction("{\"AWAY_ON\":\"${deviceid}\"}")
+    getAction("{\"AWAY_ON\":\"${deviceid}\"}", dni)
 }
 def childAwayOff(String dni) {
     //Do not use, use FrontOff instead
     //Send Child Away off command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting away mode off for child ${deviceid}"
-    getAction("{\"AWAY_OFF\":\"${deviceid}\"}")
+    getAction("{\"AWAY_OFF\":\"${deviceid}\"}", dni)
 }
 def childHeat(String dni) {
     //Send Child Heat mode
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting heat mode for child ${deviceid}"
-    getAction("{\"HEAT\":\"${deviceid}\"}")
+    getAction("{\"HEAT\":\"${deviceid}\"}", dni)
 }
 def childSetTemp(String temp, String dni) {
     //Send Child Set Temp command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting ${temp} degrees for child ${deviceid}"
-    getAction("{\"SET_TEMP\":[${temp},\"${deviceid}\"]}")
+    getAction("{\"SET_TEMP\":[${temp},\"${deviceid}\"]}", dni)
 }
 def childCancelHold(String dni) {
     //Send Child Set Temp command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting revert to schedule for child ${deviceid}"
-    getAction("{\"TIMER_HOLD_OFF\":[0,\"${deviceid}\"]}")
+    getAction("{\"TIMER_HOLD_OFF\":[0,\"${deviceid}\"]}", dni)
 }
 def childHold(String temp, String hours, String minutes, String dni) {
     //Send Child Hold command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting Hold at ${temp} degrees for ${hours}h:${mins}m for child ${deviceid}"
-    getAction("{\"HOLD\":[{\"temp\":${temp},\"id\":\"\",\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}")
+    getAction("{\"HOLD\":[{\"temp\":${temp},\"id\":\"\",\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}", dni)
 }
 def childBoostOn(String hours, String minutes, String dni) {
     //Send Child Boost On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting boost on for child ${deviceid}"
-    getAction("{\"BOOST_ON\":[{\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}")
+    getAction("{\"BOOST_ON\":[{\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}", dni)
 }
 def childBoostOff(String hours, String minutes, String dni) {
     //Send Child Boost On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting boost off for child ${deviceid}"
-    getAction("{\"BOOST_OFF\":[{\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}")
+    getAction("{\"BOOST_OFF\":[{\"hours\":${hours},\"minutes\":${minutes}},\"${deviceid}\"]}", dni)
 }
 def childFrostOn(String dni) {
     //Send Child Frost On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting frost on for child ${deviceid}"
-    getAction("{\"FROST_ON\":\"${deviceid}\"}")
+    getAction("{\"FROST_ON\":\"${deviceid}\"}", dni)
 }
 def childFrostOff(String dni) {
     //Send Child Frost On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting frost off for child ${deviceid}"
-    getAction("{\"FROST_OFF\":\"${deviceid}\"}")
+    getAction("{\"FROST_OFF\":\"${deviceid}\"}", dni)
 }
 def childSetFrost(String temp, String dni) {
     //Send Child Set Frost command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting set frost at ${temp} degrees for child ${deviceid}"
-    getAction("{\"SET_FROST\":[\"${temp}\",\"${deviceid}\"]}")
+    getAction("{\"SET_FROST\":[\"${temp}\",\"${deviceid}\"]}", dni)
 }
 def childTimerOn(String dni) {
     //Send Child Timer On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting timer on for child ${deviceid}"
-    getAction("{\"TIMER_ON\":\"${deviceid}\"}")
+    getAction("{\"TIMER_ON\":\"${deviceid}\"}", dni)
 }
 def childTimerOff(String dni) {
     //Send Child Timer Off command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting timer off for child ${deviceid}"
-    getAction("{\"TIMER_OFF\":\"${deviceid}\"}")
+    getAction("{\"TIMER_OFF\":\"${deviceid}\"}", dni)
 }
 def childTimerHoldOn(String minutes, String dni) {
     //Send Child Timer Hold On command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting timer hold on for child ${deviceid}"
-    getAction("{\"TIMER_HOLD_ON\":[${minutes},\"${deviceid}\"]}")
+    getAction("{\"TIMER_HOLD_ON\":[${minutes},\"${deviceid}\"]}", dni)
 }
 def childTimerHoldOff(String minutes, String dni) {
     //Send Child Timer Hold Off command
-    def deviceid = dni.replaceAll("neostat", "").replaceAll("-", " ")
+    def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting timer hold off for child ${deviceid}"
-    getAction("{\"TIMER_HOLD_OFF\":[${minutes},\"${deviceid}\"]}")
+    getAction("{\"TIMER_HOLD_OFF\":[${minutes},\"${deviceid}\"]}", dni)
 }
 def childHolidayOn(String hhmmssddmmyyy, String dni) {
     def dateTime = new Date()
     def currenttimestamp = dateTime.format("HHmmssddMMyyyy", location.timeZone)
     log.debug "Setting Holiday mode from ${currenttimestamp} to ${neohubtimestamp}"
-    getAction("{\"HOLIDAY\":[\"${currenttimestamp}\",\"${hhmmssddmmyyy}\"]}")
+    getAction("{\"HOLIDAY\":[\"${currenttimestamp}\",\"${hhmmssddmmyyy}\"]}", "hub")
 }
 def childCancelHoliday(String dni) {
     //Send request to cancel holiday
     log.debug "Cancel holiday mode"
-    getAction("{\"CANCEL_HOLIDAY\":0}")
+    getAction("{\"CANCEL_HOLIDAY\":0}", "hub")
 }
 
 // This function receives the response from the NeoHub bridge and updates things, or passes the response to an individual thermostat
 def parse(response) {
-    def msg = new String(unhexify(response))
-    log.debug msg
+    def resp = new String(unhexify(response))
+    //log.debug resp.length() + " - " + resp
 
+    if (resp.length() == 1024)
+    {
+        // Length is max so concatenate together
+        def concatStr = getDataValue("fullMessage")
+        if (concatStr == null)
+        {
+		    concatStr = resp
+        }
+        else
+        {
+            concatStr = concatStr + resp
+        }
+        device.updateDataValue("fullMessage", concatStr)
+    }
+    else
+    {
+		// Length less than max so concatenate with previous if required, and then process
+		def concatStr = getDataValue("fullMessage")
+        if (concatStr == null)
+        {
+		    concatStr = resp
+        }
+        else
+        {
+            concatStr = concatStr + resp
+            device.updateDataValue("fullMessage", "")
+        }
+		processResponse(concatStr)
+	}
+}
+
+def processResponse(response)
+{
     def map = [: ]
     def events = []
     def cmds = []
 
-    if (description == "updated") return
-    //def descMap = parseDescriptionAsMap(msg)
-    //def body = new String(descMap["body"]())
-
     def slurper = new JsonSlurper()
     
+    //log.debug "Got full response = " + response
+    
+    def result
     try {
-        def result = slurper.parseText(msg)
+        result = slurper.parseText(response)
     }
     catch (e) {
         log.debug "Couldnt process, probably partial packet: ${e}"
     }
     
-    //def result = slurper.parseText(msg)
-    if (state.debug) log.debug result
-    if (state.debug) log.debug state.lastmessage
-    //device.updateDataValue("lastmessage",val)
-    //device.getDataValue("lastmessage"
-    
+    def requestingDeviceName = device.getDataValue("requestingDevice")
+    if (state.debug) log.debug "Processing response to " + requestingDeviceName
     
     cmds << sendEvent(name: "lastcommand", value: "${result}", isStateChange: true)
-
-    if (state.lastmessage == "Get zones") {
+    if (requestingDeviceName == "getzones")
+    {
         //Iterate through each of the items in the result to create a device
         for (item in result) {
             def thisthermostatname = ""
             def thisthermostatdni = ""
+            
             //Prepare Thermostat name - prepend and postpend of settings if they exist
-            if (prestatname != null) {
-                thisthermostatname = thisthermostatname + prestatname + " "
-            }
+            if (prestatname != null) {thisthermostatname = thisthermostatname + prestatname + " "}
             thisthermostatname = thisthermostatname + item.key
-            if (poststatname != null) {
-                thisthermostatname = thisthermostatname + " " + poststatname
-            }
+            if (poststatname != null) {thisthermostatname = thisthermostatname + " " + poststatname}
+            
             //Prepare DNI - Remove spaces and replace with a hyphen to prevent problems with HTML requests
-            thisthermostatdni = "neostat${item.key.replaceAll(" ", " - ")}"
+            thisthermostatdni = "neostat${item.key}" //item.key.replaceAll(" ", "+")
+            
             log.debug "Adding child Name: ${thisthermostatname}, DNI: ${thisthermostatdni}, Stat ID: ${item.value} to Hub: ${device.hub.id}"
-            try {
-
+            try
+            {
                 addChildDevice("cjcharles0", "Neo Thermostat", thisthermostatdni, [name: thisthermostatname, isComponent: false])
-            } catch (e) {
+            }
+            catch (e)
+            {
                 log.debug "Couldnt add device, probably already exists: ${e}"
             }
         }
-        //Finally send a refresh command to get the latest info for each thermostat
-        state.lastmessage = ""
-        refresh()
+        //refresh()
     }
-
-    if (state.lastmessage == "Refresh zone") {
+    else if (requestingDeviceName == "hub")
+    {
+        log.debug "received hub command"
+    }
+    else if (requestingDeviceName.substring(0,7) == "neostat")
+    {
         //We got a command/response for an individual thermostat so send data to thermostat
-        if (state.debug) log.debug "Received a response from NeoHub for ${result.devices.device}"
+        if (state.debug) log.debug "Sending response to ${resultdevice} --- ${result}"
         //Now we try to find the child, and if found then send it the payload
         try {
             def resultdevice = getChildDevices().find {
-                it.deviceNetworkId == result.devices.device
+                it.deviceNetworkId == requestingDeviceName //"neostat" + result.devices[0].device
             }
-            resultdevice?.processNeoResponse(result.devices)
-        } catch (e) {
+            resultdevice?.processNeoResponse(result)
+        }
+        catch (e)
+        {
             log.debug "Couldnt process response, probably this child doesnt exist: ${e}"
         }
-        state.lastmessage = ""
+    }
+    else
+    {
+        log.debug "Unknown source of response"
     }
     return cmds
 }
@@ -502,9 +550,11 @@ def holidayOnOrCancel() {
 }
 
 //These functions are helper functions to talk to the NeoHub Bridge
-def getAction(uri) {
+def getAction(uri, requestdevice) {
     log.debug "uri ${uri}"
-
+    
+    device.updateDataValue("requestingDevice", requestdevice)
+    
     interfaces.rawSocket.connect(neohubip, 4242) //eol: "\r"
     interfaces.rawSocket.sendMessage(uri + "\0\r")
 }
