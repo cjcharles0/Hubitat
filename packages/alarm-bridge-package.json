@@ -1,7 +1,7 @@
 {
   "packageName": "Alarm Bridge",
   "minimumHEVersion": "1.1",
-  "author": "Cjcharles0",
+  "author": "cjcharles0",
   "dateReleased": "2020-09-28",
   "documentationLink": "https://github.com/cjcharles0/Hubitat",
   "communityLink": "https://community.hubitat.com/t/thread-url-here",
@@ -10,12 +10,16 @@
   ],
   "drivers": [
     {
-      "id": "daf8333a-3b78-5ad0-af46-1xxxxxxxxxxba",
-      "internalId": 865,
+      "id": "daf8333a-3b78-5ad0-af46-daf8333adabb",
       "name": "Alarm Bridge Device Parent",
-      "betaVersion": "v1.1",
       "namespace": "cjcharles0",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm-bridge/alarm-bridge-dth.groovy",
+      "required": true
+    },
+      "id": "daf8333a-3b78-5ad0-af46-daf8333adaba",
+      "name": "Alarm Bridge Child Switch",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm-bridge/alarm-child-switch.groovy",
       "required": true
     }
   ],
