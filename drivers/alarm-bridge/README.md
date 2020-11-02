@@ -1,10 +1,10 @@
-#Alarm Bridge Controller for Visonic, NetworX and Elk Alarm devices linked through an ESP bridge
+# Alarm Bridge Controller for Visonic, NetworX and Elk Alarm devices linked through an ESP bridge
 
-##Overview
+## Overview
 This code has been written to interface an ESP8266 based bridge into Hubitat. It will expose all zones, plus create child devices for them. It will also create child devices to arm/disarm the alarm (this is configurable in the settings). It also has several attributes so it is easy to pull alarm text into Hubitat Dashboards by using the 'Attribute' template. Some instructions are specific to the alarm that you are bridging.
 ![Example Dashboard](Hubitat_Dashboard_Image.png)
 
-##Some important points to note:
+## Some important points to note:
 1) If you mess up the settings on your ESP (or need to change WiFi info...etc) then you can reset the device to default settings by power cycling 5 times with the device on for 1s per power cycle. The next boot it will begin broadcasting an access point again for configuration from scratch.
 2) I strongly recommend giving your ESP a fixed IP address in your router config since otherwise you will need to update your settings whenever the IP changes (though there is now support for Static IP on the device - not as good as from the router)
 3) I have created a custom inactvity motion timeout as some alarms give no notification that motion has stopped, this will default to 10s after every reboot, but you can configure it through the ESP dashboard.
@@ -15,7 +15,7 @@ This code has been written to interface an ESP8266 based bridge into Hubitat. It
 9) If connecting to an MQTT broker rather than SmartThings then you can enter the details on the settings/advanced page (HA IP/port and user/pass which can sometimes be anything you like). When you enable MQTT mode it will disable this integration. The alarm status will be posted to topic:"alarm/panel" e.g. "disarmed" or "armed_away", meanwhile zone status will be posted to topic:"alarm/zoneX" for messages relating to zone1/zone2/... If you post to topic:"alarm/set" then you can change the alarm status to DISARM/ARM_HOME/ARM_AWAY/ARM_HOME_INSTANT/ARM_AWAY_INSTANT.
 9) For those wanting to donate then my beer fund would gladly appreciate it :) - https://paypal.me/cjcharles
 
-##Installation Instructions
+## Installation Instructions
 1) Turn on the ESP by plugging into Micro USB (do not use Micro USB when connecting to a serial alarm like Visonic) and you will see a WiFi Access Point created, called "AlarmPanelBridge" (it might take a minute to appear). Connect to this access point (no password needed) and navigate to 192.168.4.1 (should be automatic on most phones if you try and use the access point for browsing). On the page that appears, you should select your own WiFi network (2.4GHz only) by choosing from the menus and adding your password.
 2) After this is complete you should see the ESP connect to your router (and should even be visible from within Windows as a Network device under the 'Network' view. Update the router so that this device is always given the same IP address, this is called a DHCP reservation - without it you may find things stop working after IP addresses change. It may take some time for the router to detect the Wemos, but if you cannot see the AlarmPanelBridge access point then the Wemos should be connected to your WiFi (it broadcasts its access point when a connection to your entered WiFi details is not possible).
 ![Network Devices](NetworkDevices.png)
