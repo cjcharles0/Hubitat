@@ -2,8 +2,8 @@
   "packageName": "Alarm Bridge",
   "author": "cjcharles0",
   "minimumHEVersion": "1.1",
-  "dateReleased": "2020-09-28",
-  "version": "1.0",
+  "dateReleased": "2020-11-15",
+  "version": "1.01",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/alarm-bridge",
   "communityLink": "https://community.hubitat.com/t/thread-url-here",
   "drivers": [
