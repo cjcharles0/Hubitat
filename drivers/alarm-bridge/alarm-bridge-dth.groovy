@@ -569,17 +569,17 @@ private handleZoneStatus(result)
 				log.debug "Got Active zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "active") // Correct message
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "open")
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "detected")
 				}
 				break
@@ -588,17 +588,17 @@ private handleZoneStatus(result)
 				log.debug "Got Inactive zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "inactive") // Correct message
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "closed")
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "clear")
 				}
 				break
@@ -607,17 +607,17 @@ private handleZoneStatus(result)
 				//log.debug "Got Open zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "active")
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "open") // Correct message
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "detected")
 				}
 				break
@@ -626,17 +626,17 @@ private handleZoneStatus(result)
 				//log.debug "Got Closed zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "inactive")
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "closed") // Correct message
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "clear")
 				}
 				break
@@ -645,17 +645,17 @@ private handleZoneStatus(result)
 				//log.debug "Got Active Bypassed zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "active") // Correct message
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "open", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "open")
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "smoke", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "detected")
 				}
 				break
@@ -664,17 +664,17 @@ private handleZoneStatus(result)
 				//log.debug "Got Inactive Bypassed zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "inactive", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "motion", value: "inactive") // Correct message
 				}
 				else if (isContactDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "closed", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "contact", value: "closed")
 				}
 				else if (isSmokeDevice)
 				{
-					sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
+					//sendEvent(name: "panelzone"+result.zone_id, value: "clear", displayed: false, isStateChange: true)
 					curdevice?.sendEvent(name: "smoke", value: "clear")
 				}
 				break
