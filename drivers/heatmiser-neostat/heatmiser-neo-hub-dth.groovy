@@ -439,7 +439,7 @@ def processResponse(response)
             log.debug "Adding child Name: ${thisthermostatname}, DNI: ${thisthermostatdni}, Stat ID: ${item.value} to Hub: ${device.hub.id}"
             try
             {
-                addChildDevice("cjcharles0", "Neo Thermostat", thisthermostatdni, [name: thisthermostatname, isComponent: false])
+                addChildDevice("cjcharles0", "Heatmiser Neo Thermostat", thisthermostatdni, [name: thisthermostatname, isComponent: false])
             }
             catch (e)
             {
