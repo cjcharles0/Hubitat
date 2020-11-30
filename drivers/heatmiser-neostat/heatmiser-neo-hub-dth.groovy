@@ -57,8 +57,6 @@ metadata {
         command "refreshHolidayButtonText"
         command "holidayOnOrCancel"
 
-        command "testcommand"
-
     }
 
     simulator {}
