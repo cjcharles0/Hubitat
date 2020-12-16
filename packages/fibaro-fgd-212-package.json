@@ -1,0 +1,18 @@
+{
+  "packageName": "Fibaro Dimmer 2 FGD-212",
+  "author": "cjcharles0",
+  "minimumHEVersion": "1.1",
+  "dateReleased": "2020-12-01",
+  "version": "1.00",
+  "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgd-212",
+  "communityLink": "https://community.hubitat.com/t/fibaro-fgs-224/59108",
+  "drivers": [
+    {
+      "id": "2fb0381a-9d4c-4600-81aa-1ea67aada222",
+      "name": "Fibaro Dimmer 2 FGD-212",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/fibaro-fgd-212/fibaro-fgd-212-dth.groovy",
+      "required": true
+    }
+  ]
+}
