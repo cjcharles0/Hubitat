@@ -1,5 +1,5 @@
 {
-  "packageName": "Fibaro FGS-224",
+  "packageName": "Fibaro Double Smart FGS-224",
   "author": "cjcharles0",
   "minimumHEVersion": "1.1",
   "dateReleased": "2020-12-01",
@@ -9,7 +9,7 @@
   "drivers": [
     {
       "id": "2fb0381a-9d4c-4600-81aa-1ea67aada111",
-      "name": "Fibaro FGS-224",
+      "name": "Fibaro Double Smart FGS-224",
       "namespace": "cjcharles0",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/fibaro-fgs-224/fibaro-fgs-224-dth.groovy",
       "required": true
