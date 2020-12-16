@@ -68,7 +68,7 @@ def CreateChildren()
 {
      try {
         for (i in 1..2) {
-	       addChildDevice("Metering Switch Child Device", "${device.deviceNetworkId}-ep${i}",
+	       addChildDevice("erocm123", "Metering Switch Child Device", "${device.deviceNetworkId}-ep${i}",
 		      [completedSetup: true, label: "${device.displayName} (S${i})",
 		      isComponent: false, componentName: "ep$i", componentLabel: "Switch $i"])
         }
