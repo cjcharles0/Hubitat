@@ -7,7 +7,7 @@
  */
  
 metadata {
-definition (name: "Fibaro FGS-224", namespace: "cjcharles", author: "Chris (help from Eric and Robin)") {
+definition (name: "Fibaro FGS-224", namespace: "cjcharles0", author: "Chris (help from Eric and Robin)") {
 capability "Switch"
 capability "Relay Switch"
 capability "Polling"
