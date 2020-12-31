@@ -63,8 +63,8 @@ metadata {
         command "ensureAlexaCapableMode"
         command "setpointUp" // Custom
 		command "setpointDown" // Custom
-		command "DurationUp" // Custom
-		command "DurationDown" // Custom
+		command "durationUp" // Custom
+		command "durationDown" // Custom
 		command "setTempHoldOn" // Custom
 		command "setTempHoldOff" // Custom
 		command "setTimerOn" // Custom
@@ -141,10 +141,10 @@ metadata {
 		}
         
 		standardTile("increaseTime", "device.increaseTime", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"DurationUp", label:'+30m'
+			state "default", action:"durationUp", label:'+30m'
 		}
         standardTile("decreaseTime", "device.decreaseTime", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"DurationDown", label:'-30m'
+			state "default", action:"durationDown", label:'-30m'
 		}
 		valueTile("holdtime", "device.holdtime", inactiveLabel: false, decoration: "flat", width: 1, height: 1) {
 			state "default", label:'${currentValue}' // icon TBC
@@ -427,7 +427,7 @@ def processNeoResponse(response)
 }
 
 
-def DurationUp() {
+def durationUp() {
 	def cmds = []
     def durationMins
     log.debug device.currentValue("holdtime")
@@ -444,7 +444,7 @@ def DurationUp() {
     return cmds
 }
 
-def DurationDown() {
+def durationDown() {
 	def cmds = []
     def durationMins
     durationMins = timeStringToMins(device.currentValue("holdtime"))
@@ -687,14 +687,14 @@ private timeStringToMins(String timeString){
 }
 
 private minsToTimeString(Integer intMins) {
-    log.debug intMins
+    //log.debug intMins
 	def timeString =  "${(intMins/60).toInteger()}:${(intMins%60).toString().padLeft(2, "0")}"
     if (state.debug) log.debug "${intMins} converted to ${timeString}"
     return timeString
 }
 
 private timeStringToHoursMins(String timeString){
-    log.debug timeString
+    //log.debug timeString
 	if (timeString?.contains(':')) {
     	def hoursMins = timeString.split(":")
         if (state.debug) log.debug "${timeString} converted to ${hoursMins[0]}:${hoursMins[1]}"
