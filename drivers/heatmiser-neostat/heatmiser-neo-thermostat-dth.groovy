@@ -23,48 +23,48 @@ import groovy.json.JsonSlurper
 
 metadata {
 	definition (name: "Heatmiser Neo Thermostat", namespace: "cjcharles0", author: "Chris Charles")
-    { 
-    	capability "Refresh"
-        capability "Configuration"
+    {
+    	//capability "Refresh"
         
         capability "Sensor"
 		capability "Temperature Measurement"
 		capability "Thermostat"
         
-        capability "Actuator"
-        capability "Relay Switch"
-        capability "Switch"
-		
-        command "refreshdelay"
-        command "refreshinfo" //This is the actual command to update the thermostat from parent
+        //capability "Actuator"
+        //capability "Relay Switch"
+        //capability "Switch"
+        
+		command "push"
+        
         command "refresh" //This is used for the overall refresh process
         
         command "boostOneHour" // Custom
-		command "boostHours" // Custom
-		command "boostTempHours" // Custom
+		command "boostHours",[[name:"desiredHours",type:"NUMBER", description:"Boost Hours", constraints:["NUMBER"]]] // Custom
+        command "boostTempHours",[[name:"desiredTemp",type:"NUMBER", description:"Boost Temperature", constraints:["NUMBER"]],[name:"desiredHours",type:"NUMBER", description:"Boost Hours", constraints:["NUMBER"]]]
         
         command "setHeatingSetpoint" //Required by ST for thermostat type
-        command "setCoolingSetpoint" //Required by ST for thermostat type
+        //command "setCoolingSetpoint" //Required by ST for thermostat type
         command "setThermostatSetpoint" //Required by ST for thermostat type
         command "setTemperature" //Required by ST for thermostat type
         command "heat" //Required by ST for thermostat type
         command "emergencyHeat" //Required by ST for thermostat type
         command "cool" //Required by ST for thermostat type
         command "setThermostatMode" //Required by ST for thermostat type
-        command "fanOn" //Required by ST for thermostat type
-        command "fanAuto" //Required by ST for thermostat type
-        command "fanCirculate" //Required by ST for thermostat type
-        command "setThermostatFanMode" //Required by ST for thermostat type
-        command "auto" //Required by ST for thermostat type
         
+        //command "fanOn" //Required by ST for thermostat type
+        //command "fanAuto" //Required by ST for thermostat type
+        //command "fanCirculate" //Required by ST for thermostat type
+        //command "setThermostatFanMode" //Required by ST for thermostat type
+        
+        command "auto" //Required by ST for thermostat type
         command "off" //Required by ST for thermostat type
         command "on" //Required by ST for switch type
         
         command "ensureAlexaCapableMode"
-        command "raiseSetpoint" // Custom
-		command "lowerSetpoint" // Custom
-		command "increaseDuration" // Custom
-		command "decreaseDuration" // Custom
+        command "setpointUp" // Custom
+		command "setpointDown" // Custom
+		command "DurationUp" // Custom
+		command "DurationDown" // Custom
 		command "setTempHoldOn" // Custom
 		command "setTempHoldOff" // Custom
 		command "setTimerOn" // Custom
@@ -76,6 +76,8 @@ metadata {
         attribute "holdtime","string" // Custom for how long to hold for
 		attribute "nextSetpointText", "string" // Custom for text display
 		attribute "statusText", "string" // Custom for neohub response
+        
+        attribute "manualSetpoint","string"
         
   		attribute "temperature","number" // Temperature Measurement
 		attribute "thermostatSetpoint","number" // Thermostat setpoint      
@@ -132,17 +134,17 @@ metadata {
 			state "default", label:'${currentValue}', unit:"dC", backgroundColor:"#ffffff"
 		}
 		standardTile("raisethermostatSetpoint", "device.raisethermostatSetpoint", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"raiseSetpoint", label:'${currentValue}'//, icon:"st.thermostat.thermostat-up"
+			state "default", action:"SetpointUp", label:'${currentValue}'//, icon:"st.thermostat.thermostat-up"
 		}
 		standardTile("lowerthermostatSetpoint", "device.lowerthermostatSetpoint", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"lowerSetpoint", label:'${currentValue}'//, icon:"st.thermostat.thermostat-down"
+			state "default", action:"SetpointDown", label:'${currentValue}'//, icon:"st.thermostat.thermostat-down"
 		}
         
 		standardTile("increaseTime", "device.increaseTime", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"increaseDuration", label:'+30m'
+			state "default", action:"DurationUp", label:'+30m'
 		}
         standardTile("decreaseTime", "device.decreaseTime", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"decreaseDuration", label:'-30m'
+			state "default", action:"DurationDown", label:'-30m'
 		}
 		valueTile("holdtime", "device.holdtime", inactiveLabel: false, decoration: "flat", width: 1, height: 1) {
 			state "default", label:'${currentValue}' // icon TBC
@@ -187,9 +189,21 @@ metadata {
 	}
 }
 
-def refreshdelay(delay)
+
+def push(button)
 {
-    if (delay == null) {delay = Random().nextInt(30) + 1}
+    try {
+        log.debug "Running function from button press: ${button}"
+        "${button}"()
+    }
+    catch (e) {
+        log.debug "Failed to run function: ${e}"
+    }
+}
+
+def refreshdelay(int delay)
+{
+    if (delay == null) {delay = Random().nextInt(20) + 1}
     log.debug "Got a delayed refresh message"
     runIn(delay, refresh)
 }
@@ -198,9 +212,9 @@ def refresh()
     //Default refresh method which calls immediate update and ensures it is scheduled
 	log.debug "Refreshing thermostat data from parent"
 	refreshinfo()
-    runEvery5Minutes(refreshinfo)
+    runEvery5Minutes("refreshinfo")
 }
-def refreshinfo()
+private refreshinfo()
 {
 	//Actually get a refresh from the parent/Neohub
     parent.childRequestingRefresh(device.deviceNetworkId)
@@ -211,15 +225,6 @@ def refreshinfo()
     }
 }
 
-def ping()
-{
-    log.debug "ping()"
-    refresh()
-}
-def poll() {
-    log.debug "poll()"
-    refresh()
-}
 def installed()
 {
 	//Here we have a new device so lets ensure that all the tiles are correctly filled with something
@@ -232,17 +237,21 @@ def updated()
 	//On every update, lets reset hold time and holding temperature
     log.debug "updated()"
     
-    //Rremove any existing schedules since 
-    unschedule()
-    
     def cmds = []
-    cmds << sendEvent(name: "statusText", value: "Please wait for next refresh or press refresh now")
+    cmds << sendEvent(name: "statusText", value: "Please press refresh now")
+    cmds << sendEvent(name: "nextSetpointText", value: "Please press refresh now")
     
     cmds << sendEvent(name: "holdtime", value: "0:00")
     
-    cmds << sendEvent(name: "manualSetpoint", value: "18°C")
+    cmds << sendEvent(name: "manualSetpoint", value: "19°C")
     cmds << sendEvent(name: "raisethermostatSetpoint", value: "+1°C")
     cmds << sendEvent(name: "lowerthermostatSetpoint", value: "-1°C")
+    
+    cmds << sendEvent(name: "temperature", value: "5")
+    cmds << sendEvent(name: "thermostatSetpoint", value: "5")
+    cmds << sendEvent(name: "coolingSetpoint", value: "5")
+    cmds << sendEvent(name: "heatingSetpoint", value: "5")
+    
     return cmds
 }
 
@@ -418,9 +427,10 @@ def processNeoResponse(response)
 }
 
 
-def increaseDuration() {
+def DurationUp() {
 	def cmds = []
     def durationMins
+    log.debug device.currentValue("holdtime")
     durationMins = timeStringToMins(device.currentValue("holdtime"))
     if (durationMins == 300) {
     	durationMins = 0
@@ -428,12 +438,13 @@ def increaseDuration() {
     else {
     	durationMins = durationMins + 30
     }
+    log.debug durationMins
     chooseSetTempOrSetHold(durationMins)
     cmds << sendEvent(name: "holdtime", value: "${minsToTimeString(durationMins)}", displayed: false, isStateChange: true)
     return cmds
 }
 
-def decreaseDuration() {
+def DurationDown() {
 	def cmds = []
     def durationMins
     durationMins = timeStringToMins(device.currentValue("holdtime"))
@@ -448,7 +459,7 @@ def decreaseDuration() {
     return cmds
 }
 
-def raiseSetpoint() {
+def SetpointUp() {
 	//Called by tile to increase set temp box
 	def cmds = []
     if (device.currentValue("raisethermostatSetpoint") == "On") {
@@ -462,7 +473,7 @@ def raiseSetpoint() {
     }
     return cmds
 }
-def lowerSetpoint() {
+def SetpointDown() {
     //Called by tile to decrease set temp box
 	def cmds = []
     if (device.currentValue("raisethermostatSetpoint") == "On") {
@@ -546,32 +557,37 @@ def chooseSetTempOrSetHold(mins = null) {
 }
 
 def boostOneHour() {
-	//Get current setpoint and add two degrees to ensure it turns on the heating
-	def desiredTemp = device.currentValue("thermostatSetpoint").toInteger() + 2
+	//Boost mode for 1 hour
+	boostTempHours(0, 1)
+    
+    //def desiredTemp = device.currentValue("temperature").toInteger() + 2
     
     //Send the command to the Neohub
-	parent.childHold(desiredTemp.toString(), "1", "0", device.deviceNetworkId)
+	//parent.childHold(desiredTemp.toString(), "1", "0", device.deviceNetworkId)
 }
 
-def boostHours(int durationHours = null) {
-	//Get current setpoint and add two degrees to ensure it turns on the heating
-	def desiredTemp = device.currentValue("thermostatSetpoint").toInteger() + 2
+def boostHours(int durationHours) {
+	//Boost mode for custom number of hours
+	boostTempHours(0, durationHours)
+    
+	//def desiredTemp = device.currentValue("thermostatSetpoint").toInteger() + 2
     
     //Also target 1 hour if not specified
-    if (desiredHours==null) desiredHours = 1
+    //if (desiredHours==null) desiredHours = 1
     
     //Finally send the command to the Neohub
-	parent.childHold(desiredTemp.toString(), desiredHours.toString(), "0", device.deviceNetworkId)
+	//parent.childHold(desiredTemp.toString(), desiredHours.toString(), "0", device.deviceNetworkId)
 }
 
-def boostTempHours(int desiredTemp = null, int desiredHours = null) {
-	//First get current setpoint in case we need to use it (target +2C if not specified)
-	def currentsetpoint = device.currentValue("thermostatSetpoint").toInteger()
-    if (desiredTemp==null) desiredTemp = currentsetpoint + 2
-    //Also target 1 hour if not specified
-    if (desiredHours==null) desiredHours = 1
+def boostTempHours(int desiredTemp, int desiredHours) {
+	//Boost to chosen target for chosen time
+    //If these are set to 0 then it will use defaults of 1 hour and rounddown(temperature)+2 (since that will ensure the thermostat turns on with a 1 degree switching range)
     
-    //Finally send the command to the Neohub
+    if (desiredTemp==0) desiredTemp = device.currentValue("temperature").toInteger() + 2
+    //Also target 1 hour if not specified
+    if (desiredHours==0) desiredHours = 1
+    
+    //Send command to neohub
 	parent.childHold(desiredTemp.toString(), desiredHours.toString(), "0", device.deviceNetworkId)
 }
 
@@ -579,10 +595,11 @@ def setTempHoldOn() {
 	def cmds = []
     def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "")
     def isthermostat = (device.currentValue("raisethermostatSetpoint") == "On") ? false : true
+    def currentholdtime = device.currentValue("holdtime")
     
-    if (state.debug) log.debug "${device.label}: Set temp hold to ${newtemp} for ${device.currentValue("holdtime")} - setTempHoldOn()"
+    if (state.debug) log.debug "${device.label}: Set temp hold to ${newtemp} for ${currentholdtime} - setTempHoldOn()"
 
-    if (device.currentValue("holdtime") == "0:00") {
+    if (currentholdtime == "0:00") {
     	//Hold time is zero, so use set temp or schedule override
 		cmds << sendEvent(name: "setTempHold", value: "tempWasSet", displayed: false, isStateChange: true)
         if (isthermostat) {
@@ -600,12 +617,12 @@ def setTempHoldOn() {
         cmds << sendEvent(name: "setTempHold", value: "cancelHold", displayed: false, isStateChange: true)
         if (isthermostat) {
             //The device is a normal thermostat so use normal hold
-            def hoursandmins = timeStringToHoursMins(device.currentValue("holdtime"))
+            def hoursandmins = timeStringToHoursMins(currentholdtime)
             parent.childHold(newtemp.toString(), hoursandmins[0], hoursandmins[1], device.deviceNetworkId)
         }
         else {
             //The device is a timer so use timer on but first convert h:mm into mmm
-            def minutes = timeStringToMins(device.currentValue("holdtime")).toString()
+            def minutes = timeStringToMins(currentholdtime).toString()
             parent.childTimerHoldOn(minutes, device.deviceNetworkId)
         }
 	}
@@ -670,12 +687,14 @@ private timeStringToMins(String timeString){
 }
 
 private minsToTimeString(Integer intMins) {
+    log.debug intMins
 	def timeString =  "${(intMins/60).toInteger()}:${(intMins%60).toString().padLeft(2, "0")}"
     if (state.debug) log.debug "${intMins} converted to ${timeString}"
     return timeString
 }
 
 private timeStringToHoursMins(String timeString){
+    log.debug timeString
 	if (timeString?.contains(':')) {
     	def hoursMins = timeString.split(":")
         if (state.debug) log.debug "${timeString} converted to ${hoursMins[0]}:${hoursMins[1]}"
