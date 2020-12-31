@@ -5,7 +5,7 @@
   "dateReleased": "2020-11-15",
   "version": "1.01",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/alarm-bridge",
-  "communityLink": "https://community.hubitat.com/t/thread-url-here",
+  "communityLink": "https://community.hubitat.com/t/release-visonic-interlogix-networx-elk-alarm-bridge/55040",
   "drivers": [
     {
       "id": "e06ac667-f3f1-4658-ab15-8e6db9fad2a6",
