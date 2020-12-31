@@ -21,15 +21,14 @@ import groovy.json.JsonSlurper
 metadata {
     definition(name: "Heatmiser Neo Hub Bridge", namespace: "cjcharles0", author: "Chris Charles") {
         capability "Refresh"
-        capability "Configuration"
-        capability "Polling"
 
         command "refreshipaddresses"
-        command "getthermostats"
-        command "removethermostats"
+        command "getThermostats"
+        command "removeThermostats"
         command "setAllAwayOn"
         command "setAllAwayOff"
 
+/*
         command "childGetDebugState"
 
         command "childRequestingRefresh"
@@ -50,6 +49,7 @@ metadata {
         command "childTimerHoldOff"
         command "childHolidayOn"
         command "childCancelHoliday"
+*/
         command "increaseHours"
         command "decreaseHours"
         command "increaseDays"
@@ -62,7 +62,6 @@ metadata {
     simulator {}
 
     preferences {
-        input("password", "password", title: "Password", required: false, displayDuringSetup: false)
         input("neohubip", "string", title: "NeoHub IP Address", description: "e.g. 192.168.1.11", required: true, displayDuringSetup: true)
         input("prestatname", "string", title: "Add before stat name", description: "e.g. 'Thermostat' would give 'Thermostat Kitchen'", required: false, displayDuringSetup: true)
         input("poststatname", "string", title: "Add after stat name", description: "e.g. 'Thermostat' would give 'Kitchen Thermostat'", required: false, displayDuringSetup: true)
@@ -167,7 +166,7 @@ def refresh()
         if (dni != null)
         {
             log.debug "Requesting updated temperature information (${counter}) for ${dni}"
-            it.refreshdelay(counter * 5)
+            it.refreshdelay(counter * 3)
             counter = counter + 1
         }
     }
@@ -202,15 +201,14 @@ def poll() {
 }
 
 //These commands will either add or remove the child thermostats, surprisingly....
-private getthermostats() {
+private getThermostats() {
     //Before sending request for thermostat list we should remove current thermostats
     def cmds = []
-    removethermostats()
     log.debug "Requesting List of Thermostats"
     cmds << getAction("{\"GET_ZONES\":0}", "getzones")
     return cmds
 }
-private removethermostats() {
+private removeThermostats() {
     log.debug "Removing Child Thermostats"
     try {
         getChildDevices()?.each {
@@ -405,8 +403,6 @@ def processResponse(response)
 
     def slurper = new JsonSlurper()
     
-    //log.debug "Got full response = " + response
-    
     def result
     try {
         result = slurper.parseText(response)
@@ -444,7 +440,7 @@ def processResponse(response)
                 log.debug "Couldnt add device, probably already exists: ${e}"
             }
         }
-        //refresh()
+        refresh()
     }
     else if (requestingDeviceName == "hub")
     {
@@ -452,13 +448,13 @@ def processResponse(response)
     }
     else if (requestingDeviceName.substring(0,7) == "neostat")
     {
-        //We got a command/response for an individual thermostat so send data to thermostat
-        if (state.debug) log.debug "Sending response to ${resultdevice} --- ${result}"
         //Now we try to find the child, and if found then send it the payload
         try {
             def resultdevice = getChildDevices().find {
                 it.deviceNetworkId == requestingDeviceName //"neostat" + result.devices[0].device
             }
+            //We got a command/response for an individual thermostat so send data to thermostat
+            if (state.debug) log.debug "Sending response to ${resultdevice} --- ${result}"
             resultdevice?.processNeoResponse(result)
         }
         catch (e)
