@@ -3,9 +3,9 @@
   "author": "cjcharles0",
   "minimumHEVersion": "1.1",
   "dateReleased": "2020-10-28",
-  "version": "1.01",
+  "version": "1.02",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/heatmiser-neostat",
-  "communityLink": "https://community.hubitat.com/t/thread-url-here",
+  "communityLink": "https://community.hubitat.com/t/release-heatmiser-neostat-neoplug-integration/55041",
   "drivers": [
     {
       "id": "2fb0381a-9d4c-4600-81aa-1ea67aada7ad",
