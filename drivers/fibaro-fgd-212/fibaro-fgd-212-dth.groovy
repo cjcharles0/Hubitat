@@ -23,7 +23,7 @@
  */
  
 metadata {
-	definition (name: "Fibaro Dimmer 2", namespace: "cjcharles0", author: "Chris (and Eric/erocm123 and David/codersaur)") {
+	definition (name: "Fibaro Dimmer 2 FGD-212", namespace: "cjcharles0", author: "Chris (and Eric/erocm123 and David/codersaur)") {
 		capability "Actuator"
 		capability "Switch"
 		capability "Switch Level"
@@ -48,10 +48,8 @@ metadata {
         attribute   "firmware", "String"
 
         fingerprint mfr: "010F", prod: "0102", model: "2000", deviceJoinName: "Fibaro Dimmer 2"
-
-		fingerprint deviceId: "0x1101", inClusters: "0x72,0x86,0x70,0x85,0x8E,0x26,0x7A,0x27,0x73,0xEF,0x26,0x2B"
+        fingerprint deviceId: "0x1101", inClusters: "0x72,0x86,0x70,0x85,0x8E,0x26,0x7A,0x27,0x73,0xEF,0x26,0x2B"
         fingerprint deviceId: "0x1101", inClusters: "0x5E,0x20,0x86,0x72,0x26,0x5A,0x59,0x85,0x73,0x98,0x7A,0x56,0x70,0x31,0x32,0x8E,0x60,0x75,0x71,0x27"
-        
 	}
     
     preferences {
@@ -237,7 +235,7 @@ def zwaveEvent(hubitat.zwave.commands.sceneactivationv1.SceneActivationSet cmd) 
 
 def buttonEvent(button, value) {
     Info("buttonEvent() Button:$button, Value:$value")
-	sendEvent(name: value, value: button, isStateChange:true, type: "physical")
+    sendEvent(name: value, value: button, isStateChange:true, descriptionText: "${device.displayName} button ${button} was ${value} ", type: "physical")
 }
 
 def zwaveEvent(hubitat.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd) {
@@ -254,7 +252,7 @@ def dimmerEvents(hubitat.zwave.Command cmd, source = null) {
     // Store last active level, which is needed for nightmode functionality:
     if (levelValue > 0) state.lastActiveLevel = levelValue
     
-	def switchEvent = createEvent(name: "switch", value: switchValue, descriptionText: "$device.displayName was turned $value [${source?source:'physical'}]", type: source?source:"physical")
+    def switchEvent = createEvent(name: "switch", value: switchValue, descriptionText: "${device.displayName} was turned ${switchValue} [${source?source:'physical'}]", type: source?source:"physical")
 	result << switchEvent
     
 	if (cmd.value) {
@@ -263,10 +261,16 @@ def dimmerEvents(hubitat.zwave.Command cmd, source = null) {
 	}
     
     // Restore pending level if dimmer has been switched on after nightmode has been disabled:
-    if (!state.nightmodeActive & (state.nightmodePendingLevel > 0) & switchEvent.isStateChange & switchValue == "on") {
-        logger("dimmerEvent(): Applying Pending Level: ${state.nightmodePendingLevel}","debug")
-        result << response(secure(zwave.basicV1.basicSet(value: Math.round(state.nightmodePendingLevel.toInteger() * 99 / 100 ))))
-        state.nightmodePendingLevel = 0
+    try {
+        if (!state.nightmodeActive & (state.nightmodePendingLevel > 0) & switchEvent.isStateChange & switchValue == "on") {
+            logger("dimmerEvent(): Applying Pending Level: ${state.nightmodePendingLevel}","debug")
+            result << response(secure(zwave.basicV1.basicSet(value: Math.round(state.nightmodePendingLevel.toInteger() * 99 / 100 ))))
+            state.nightmodePendingLevel = 0
+        }
+    }
+    catch(e)
+    {
+        log.debug "Error restoring brightness: ${e}"
     }
     
 	if (switchEvent.isStateChange) {
@@ -589,7 +593,7 @@ private command(hubitat.zwave.Command cmd) {
     }
 }
 
-private commands(commands, delay=1500) {
+private commands(commands, delay=1000) {
 	delayBetween(commands.collect{ command(it) }, delay)
 }
 
@@ -664,16 +668,16 @@ def update_needed_settings()
     def configuration = new XmlSlurper().parseText(configuration_model())
     def isUpdateNeeded = "NO"
     
-    if(!state.needfwUpdate || state.needfwUpdate == ""){
+    if(!state.needfwUpdate || state.needfwUpdate == "") {
        logging("Requesting device firmware version")
        cmds << zwave.versionV1.versionGet()
     }   
-    if(!state.association1 || state.association1 == "" || state.association1 == "1"){
+    if(!state.association1 || state.association1 == "" || state.association1 == "1") {
        logging("Setting association group 1")
        cmds << zwave.associationV2.associationSet(groupingIdentifier:1, nodeId:zwaveHubNodeId)
        cmds << zwave.associationV2.associationGet(groupingIdentifier:1)
     }
-    if(!state.association2 || state.association2 == "" || state.association1 == "2"){
+    if(!state.association2 || state.association2 == "" || state.association1 == "2") {
        logging("Setting association group 2")
        cmds << zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:zwaveHubNodeId)
        cmds << zwave.associationV2.associationGet(groupingIdentifier:2)
@@ -681,7 +685,7 @@ def update_needed_settings()
    
     configuration.Value.each
     {     
-        if ("${it.@setting_type}" == "zwave"){
+        if ("${it.@setting_type}" == "zwave") {
             if (currentProperties."${it.@index}" == null)
             {
                 if (device.currentValue("firmware") == null || it.@fw == "" || "${it.@fw}".indexOf(device.currentValue("firmware")) >= 0){
@@ -716,16 +720,16 @@ def cmd2Integer(array) {
 switch(array.size()) {
 	case 1:
 		array[0]
-    break
+        break
 	case 2:
     	((array[0] & 0xFF) << 8) | (array[1] & 0xFF)
-    break
+        break
     case 3:
     	((array[0] & 0xFF) << 16) | ((array[1] & 0xFF) << 8) | (array[2] & 0xFF)
-    break
+        break
 	case 4:
     	((array[0] & 0xFF) << 24) | ((array[1] & 0xFF) << 16) | ((array[2] & 0xFF) << 8) | (array[3] & 0xFF)
-	break
+	    break
     }
 }
 
@@ -733,25 +737,25 @@ def integer2Cmd(value, size) {
 	switch(size) {
 	case 1:
 		[value]
-    break
+        break
 	case 2:
     	def short value1   = value & 0xFF
         def short value2 = (value >> 8) & 0xFF
         [value2, value1]
-    break
+        break
     case 3:
     	def short value1   = value & 0xFF
         def short value2 = (value >> 8) & 0xFF
         def short value3 = (value >> 16) & 0xFF
         [value3, value2, value1]
-    break
+        break
 	case 4:
     	def short value1 = value & 0xFF
         def short value2 = (value >> 8) & 0xFF
         def short value3 = (value >> 16) & 0xFF
         def short value4 = (value >> 24) & 0xFF
 		[value4, value3, value2, value1]
-	break
+	    break
 	}
 }
 
