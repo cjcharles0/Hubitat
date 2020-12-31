@@ -14,6 +14,18 @@
       "tags": ["Temperature & Humidity","Climate Control"],
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/heatmiser-neostat-package.json",
       "description": "Heatmiser Neostat integration for all Neostat devices"
+    },
+    {
+      "name": "Fibaro Dimmer 2 FGD-212",
+      "tags": ["Lights & Switches"],
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/fibaro-fgd-212-package.json",
+      "description": "Fibaro Dimmer 2 Handler, with support for nightmode brightness"
+    },
+    {
+      "name": "Fibaro Double Smart FGS-224",
+      "tags": ["Lights & Switches"],
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/fibaro-fgs-224-package.json",
+      "description": "Fibaro Double Smart Module with support for secure mode and FGS-214"
     }
   ]
 }
