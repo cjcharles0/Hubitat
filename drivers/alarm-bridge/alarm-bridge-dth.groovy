@@ -483,7 +483,10 @@ private handleAlarmStatus(result)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
 			sendEvent(name: "alarmStatus", value: "Disarmed")
-            if (settings.changehsm) sendLocationEvent(name: "hsmSetArm", value: "disarm")
+			if (settings.changehsm) {
+				//log.debug "Updating HSM"
+				sendLocationEvent(name: "hsmSetArm", value: "disarm")
+			}
 			log.debug "Disarmed Status found"
 			break
 
@@ -500,7 +503,9 @@ private handleAlarmStatus(result)
 			sendEvent(name: "armaway", value: "active", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
 			sendEvent(name: "alarmStatus", value: "Armed Away")
-            if (settings.changehsm) sendLocationEvent(name: "hsmSetArm", value: "armAway")
+			if (settings.changehsm) {
+				sendLocationEvent(name: "hsmSetArm", value: "armAway")
+			}
 			log.debug "Armed Away Status found"
 			break
 
@@ -509,7 +514,9 @@ private handleAlarmStatus(result)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "active", displayed: false)
 			sendEvent(name: "alarmStatus", value: "Armed Home")
-            if (settings.changehsm) sendLocationEvent(name: "hsmSetArm", value: "armHome")
+			if (settings.changehsm) {
+				sendLocationEvent(name: "hsmSetArm", value: "armHome")
+			}
 			log.debug "Armed Home Status found"
 			break
 
