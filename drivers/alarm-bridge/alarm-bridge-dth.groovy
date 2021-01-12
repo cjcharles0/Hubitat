@@ -387,7 +387,7 @@ def parse(description)
 				handleRefresh(result)
 				break
 
-			case ["create_zones"]:
+			case ["create_zones", "zone_names"]:
 				log.debug "Handling getzonenames page"
 				handleCreateZones(result)
 				break
