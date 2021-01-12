@@ -881,8 +881,30 @@ private getAction(uri)
 
 	def userpass
 
-	if(password != null && password != "") 
+	if (password != null && password != "") {
 		userpass = encodeCredentials("admin", password)
+	}
+	
+	def headers = getHeader(userpass)
+    
+	def hubAction = new hubitat.device.HubAction(
+		method: "GET",
+		path: uri,
+		headers: headers
+		)
+	return hubAction
+}
+
+private postAction(uri)
+{ 
+	log.debug "uri ${uri}"
+	updateDNI()
+
+	def userpass
+
+	if (password != null && password != "") {
+		userpass = encodeCredentials("admin", password)
+	}
 	
 	def headers = getHeader(userpass)
     
