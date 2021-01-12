@@ -27,8 +27,8 @@ metadata
 		capability "Configuration"
 		
 		attribute "alarmStatus", "string"
-        attribute "alarmEvents", "string"
-        attribute "problemtext", "string"
+		attribute "alarmEvents", "string"
+		attribute "problemtext", "string"
 		attribute "armaway", "string"
 		attribute "armhome", "string"
 		attribute "disarm", "string"
@@ -63,7 +63,7 @@ metadata
 		input name: "prename", type: "string", title:"Add this before child zone names", description: "e.g. 'Zone' would give 'Zone Kitchen'", required: false, displayDuringSetup: true
 		input name: "postname", type: "string", title:"Add this after child zone names", description: "e.g. 'Zone' would give 'Kitchen Zone'", required: false, displayDuringSetup: true
 		input name: "alarmtriggermethod", type: "enum", title: "Method to trigger alarm", options: ["Serial", "IO"], description: "Default IO if unsure", required: true, displayDuringSetup: true
-        input name: "inactivityseconds", type: "string", title:"Motion sensor inactivity timeout", description: "override the default of 20s (60s max)", required: false, displayDuringSetup: false
+		input name: "inactivityseconds", type: "string", title:"Motion sensor inactivity timeout", description: "override the default of 20s (60s max)", required: false, displayDuringSetup: false
 		input name: "password", type: "password", title:"Password", required:false, displayDuringSetup:false
 	}
 
