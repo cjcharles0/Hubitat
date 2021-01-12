@@ -686,9 +686,9 @@ private handleZoneStatus(result)
 				}
 				break
 
-            case "Tamper":
+			case "Tamper":
 				//log.debug "Got Tamper for zone: " + result.zone_id + ", which is called - " + curdevice
-                // We'll set it to open/motion for now, since at least that gives an indication something is wrong!
+				// We'll set it to open/motion for now, since at least that gives an indication something is wrong!
 				if (isMotionDevice)
 				{
 					sendEvent(name: "panelzone"+result.zone_id, value: "active", displayed: false, isStateChange: true)
@@ -725,24 +725,28 @@ private handleCreateZones(result)
 		if (prename != null) {thisname = thisname + prename + " "}
 		thisname = thisname + curzone.zonename
 		if (postname != null) {thisname = thisname + " " + postname}
+		
+		def thisid = ""
+		if (curzone.zone_id) {thisid = curzone.zone_id}
+		if (curzone.zoneid) {thisid = curzone.zoneid}
 
 		// Now try to find a child device with the right name - wrapped in try in case it fails to find any children
 		def curchildzone = null
-        try
+		try
 		{
 			if (curzone.zonetype == "Output")
-            {
-                // This is if you have an output device (used on some panels) - First update tile name then try to find child device
-                sendEvent(name: "paneloutputname"+(curzone.zoneid), value: curzone.zonename)
-                log.debug "Trying to add child with name: ${thisname}, ID: alarmchildoutput${curzone.zoneid} to ${hub.id}"
-                curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildoutput${curzone.zoneid}"}
+			{
+				// This is if you have an output device (used on some panels) - First update tile name then try to find child device
+				sendEvent(name: "paneloutputname"+(thisid), value: thisname)
+				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildoutput${thisid} to ${hub.id}"
+				curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildoutput${thisid}"}
 			}
 			else
 			{
 				// This is the normal panel zone name - First update tile name then try to find child device
-				sendEvent(name: "panelzonename"+(curzone.zoneid), value: curzone.zonename)
-				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildzone${curzone.zoneid} to ${hub.id}"
-				curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildzone${curzone.zoneid}"}
+				sendEvent(name: "panelzonename"+(thisid), value: thisname)
+				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildzone${thisid} to ${hub.id}"
+				curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildzone${thisid}"}
 			}
 		}
 		catch (e)
@@ -762,37 +766,37 @@ private handleCreateZones(result)
 					{
 						case ["Magnet", "Contact", "Entry/Exit"]:
 							// If it is a magnetic sensor then add it as a contact sensor
-							addChildDevice("hubitat", "Virtual Contact Sensor", "alarmchildzone${curzone.zoneid}", [name: thisname])
+							addChildDevice("hubitat", "Virtual Contact Sensor", "alarmchildzone${thisid}", [name: thisname])
 							log.debug "Creating contact zone"
 							break
 
 						case ["Motion", "Interior", "Wired"]:
 							// If it is a motion sensor then add it as a motion detector
-							addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${curzone.zoneid}", [name: thisname])
+							addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${thisid}", [name: thisname])
 							log.debug "Creating motion zone"
 							break
 
 						case ["Smoke", "Fire"]:
 							try
 							{
-								addChildDevice("hubitat", "Virtual Smoke Sensor", "alarmchildzone${curzone.zone_id}", [name: thisname])
+								addChildDevice("hubitat", "Virtual Smoke Sensor", "alarmchildzone${thisid}", [name: thisname])
 							}
 							catch (e)
 							{
 								log.debug "Couldn't create Smoke Detector child device. Is device handler installed ? Creating motion detector zone instead."
-								addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${curzone.zone_id}", [name: thisname])
+								addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${thisid}", [name: thisname])
 							}
 							log.debug "Created Smoke Alarm zone child device"
 							break
 
 						case ["Shock", "Vibration", "Gas", "Panic", "KeySwitch"]:
 							// Add the remainders as motion detectors for now - will display motion/no-motion instead of active/inactive sadly
-							addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${curzone.zoneid}", [name: thisname])
+							addChildDevice("hubitat", "Virtual Motion Sensor", "alarmchildzone${thisid}", [name: thisname])
 							break
 
 						case ["Output"]:
 							// This is an output zone for controlling on/off
-							addChildDevice("erocm123", "Switch Child Device", "alarmchildoutput${curzone.zoneid}", [name: "${thisname} Output"])
+							addChildDevice("erocm123", "Switch Child Device", "alarmchildoutput${thisid}", [name: "${thisname} Output"])
 							log.debug "Creating output zone"
 							break
 
