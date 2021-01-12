@@ -740,14 +740,14 @@ private handleCreateZones(result)
 			{
 				// This is if you have an output device (used on some panels) - First update tile name then try to find child device
 				sendEvent(name: "paneloutputname"+(thisid), value: thisname)
-				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildoutput${thisid} to ${hub.id}"
+				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildoutput${thisid} to Hub ${hub.id}"
 				curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildoutput${thisid}"}
 			}
 			else
 			{
 				// This is the normal panel zone name - First update tile name then try to find child device
 				sendEvent(name: "panelzonename"+(thisid), value: thisname)
-				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildzone${thisid} to ${hub.id}"
+				log.debug "Trying to add child with name: ${thisname}, ID: alarmchildzone${thisid} to Hub ${hub.id}"
 				curchildzone = getChildDevices()?.find { it.deviceNetworkId == "alarmchildzone${thisid}"}
 			}
 		}
