@@ -38,6 +38,7 @@ metadata
 		command "AlarmDisarm"
 		command "AlarmTrigger"
         
+        command "push"
 		command "ESPRestart"
 		
 		command "CreateZoneDevices"
@@ -226,6 +227,17 @@ def ESPRestart()
 	// Can power cycle the ESP device if needed
 	log.debug "restart() - Reboot the ESP (restart is safer than reset)"
 	getAction("/restart")
+}
+
+def push(button)
+{
+    try {
+        log.debug "Running function from button press: ${button}"
+        "${button}"()
+    }
+    catch (e) {
+        log.debug "Failed to run function: ${e}"
+    }
 }
 
 def CreateZoneDevices()
