@@ -838,8 +838,14 @@ private handleCreateZones(result)
     if (settings.createcontrolchilddevices) {
         def switches = ["disarm", "armhome", "armaway"] //, "panic", "armhome_bypass", "armaway_bypass"]
         switches.each {
-            def child = addChildDevice("cjcharles0", "Alarm Bridge Child Switch", it.value, [name: "Alarm ${it.value.capitalize()}"])
-            child.off()
+            try {
+                def child = addChildDevice("cjcharles0", "Alarm Bridge Child Switch", "alarm${it.value}", [name: "Alarm ${it.value.toString().capitalize()}"])
+                child.off()
+            }
+            catch (e)
+			{
+				log.error "Couldnt add device, probably already exists: ${e}"
+			}
         }
     }
 }
