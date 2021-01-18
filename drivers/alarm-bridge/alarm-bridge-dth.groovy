@@ -826,7 +826,7 @@ private handleCreateZones(result)
     if (settings.createcontrolchilddevices) {
         def switches = ["disarm", "armhome", "armaway"] //, "panic", "armhome_bypass", "armaway_bypass"]
         switches.each {
-            def child = addChildDevice("cjcharles0", "Alarm Child Switch", it.value, [name: "Alarm ${it.value.capitalize()}"])
+            def child = addChildDevice("cjcharles0", "Alarm Bridge Child Switch", it.value, [name: "Alarm ${it.value.capitalize()}"])
             child.off()
         }
     }
