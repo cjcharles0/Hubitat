@@ -436,7 +436,7 @@ def sendData(message) {
             try
             {
                 def childdevice = getChildDevices()?.find { it.deviceNetworkId == name }
-                childdevice.off()
+                //childdevice.off()
             }
             catch (e)
             {
