@@ -793,7 +793,7 @@ private handleCreateZones(result)
 						case ["Smoke", "Fire"]:
 							try
 							{
-								addChildDevice("hubitat", "Virtual Smoke Sensor", "alarmchildzone${thisid}", [name: thisname])
+								addChildDevice("hubitat", "Virtual Smoke Detector", "alarmchildzone${thisid}", [name: thisname])
 							}
 							catch (e)
 							{
