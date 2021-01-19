@@ -21,19 +21,20 @@ metadata {
 
 
 def on() {
-    sendEvent(name: "switch", value: "on")
-    sendData("on")
+	sendEvent(name: "switch", value: "on")
+	sendData("on")
+	runin(2, off)
 }
 
 def off() {
-    sendEvent(name: "switch", value: "off")
-    sendData("off")
+	sendEvent(name: "switch", value: "off")
+	sendData("off")
 }
 
 def sendData(String value) {
-    parent.sendData("${device.deviceNetworkId} ${value}")  
+	parent.sendData("${device.deviceNetworkId} ${value}")  
 }
 
 def parse(message) {
-    log.debug message
+	log.debug message
 }
