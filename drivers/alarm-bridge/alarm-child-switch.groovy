@@ -15,7 +15,7 @@ metadata {
 	definition (name: "Alarm Bridge Child Switch", namespace: "cjcharles0", author: "Chris Charles") {
 		capability "Switch"
         
-        command "sendData"
+		command "sendData"
         
 		//capability "Relay Switch"
 		//capability "PushableButton"
