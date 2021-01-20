@@ -14,6 +14,9 @@
 metadata {
 	definition (name: "Alarm Bridge Child Switch", namespace: "cjcharles0", author: "Chris Charles") {
 		capability "Switch"
+        
+        command "sendData"
+        
 		//capability "Relay Switch"
 		//capability "PushableButton"
 	}
@@ -23,7 +26,7 @@ metadata {
 def on() {
 	sendEvent(name: "switch", value: "on")
 	sendData("on")
-	runin(2, off)
+	runIn(2, off)
 }
 
 def off() {
