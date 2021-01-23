@@ -230,7 +230,6 @@ def installed()
 	//Here we have a new device so lets ensure that all the tiles are correctly filled with something
     log.debug "installed()"
 	updated()
-    ensureAlexaCapableMode() //Shouuldnt be needed but done just in case
 }
 def updated()
 {
@@ -251,6 +250,8 @@ def updated()
     cmds << sendEvent(name: "thermostatSetpoint", value: "5")
     cmds << sendEvent(name: "coolingSetpoint", value: "5")
     cmds << sendEvent(name: "heatingSetpoint", value: "5")
+    
+    cmds << sendEvent(name: "thermostatMode", value: "heat")
     
     return cmds
 }
@@ -493,10 +494,12 @@ def setTimerOn() {
 	if (device.currentValue("manualSetpoint") == "Neoplug Control") {
     	//The thermostat is a plug turn it on
         parent.childTimerOn(device.deviceNetworkId)
+        runIn(5, refresh)
     }
     else {
     	//Set it to boost for an hour as that is all we can do
         parent.childTimerHoldOn("60", device.deviceNetworkId)
+        runIn(5, refresh)
     }
 }
 def setTimerOff() {
@@ -504,10 +507,12 @@ def setTimerOff() {
 	if (device.currentValue("manualSetpoint") == "Neoplug Control") {
     	//The thermostat is a plug turn it on
 		parent.childTimerOff(device.deviceNetworkId)
+        runIn(5, refresh)
     }
     else {
     	//Set it to boost for an hour as that is all we can do
         parent.childTimerHoldOff("60", device.deviceNetworkId)
+        runIn(5, refresh)
     }
 }
 private on() {
@@ -522,6 +527,7 @@ def away() {
 	def cmds = []
 	if (state.debug) log.debug "${device.label}: away()"
 	parent.childFrostOn(device.deviceNetworkId)
+    runIn(5, refresh)
     cmds << sendEvent(name: "awayholiday", value: "away", displayed: true)
     return cmds
 }
@@ -530,6 +536,7 @@ def awayOff() {
 	def cmds = []
 	if (state.debug) log.debug "${device.label}: awayOff()"
 	parent.childFrostOff(device.deviceNetworkId)
+    runIn(5, refresh)
     cmds << sendEvent(name: "awayholiday", value: "off", displayed: true)
     return cmds
 }
@@ -538,6 +545,7 @@ def holidayOff() {
 	def cmds = []
 	if (state.debug) log.debug "${device.label}: holidayOff()"
 	parent.childCancelHoliday(device.deviceNetworkId)
+    runIn(5, refresh)
     cmds << sendEvent(name: "awayholiday", value: "off", displayed: true)
     return cmds
 }
@@ -589,6 +597,7 @@ def boostTempHours(int desiredTemp, int desiredHours) {
     
     //Send command to neohub
 	parent.childHold(desiredTemp.toString(), desiredHours.toString(), "0", device.deviceNetworkId)
+    runIn(5, refresh)
 }
 
 def setTempHoldOn() {
@@ -605,6 +614,7 @@ def setTempHoldOn() {
         if (isthermostat) {
             //The device is a normal thermostat so use normal set temp
             parent.childSetTemp(newtemp.toString(), device.deviceNetworkId)
+            runIn(5, refresh)
         }
         else {
             //The device is a timer so use timer on for 0:00 (same as pressing on button)
@@ -619,11 +629,13 @@ def setTempHoldOn() {
             //The device is a normal thermostat so use normal hold
             def hoursandmins = timeStringToHoursMins(currentholdtime)
             parent.childHold(newtemp.toString(), hoursandmins[0], hoursandmins[1], device.deviceNetworkId)
+            runIn(5, refresh)
         }
         else {
             //The device is a timer so use timer on but first convert h:mm into mmm
             def minutes = timeStringToMins(currentholdtime).toString()
             parent.childTimerHoldOn(minutes, device.deviceNetworkId)
+            runIn(5, refresh)
         }
 	}
     //Also update the tile immediately (shouldn't really do this as should wait until the next update,
@@ -641,10 +653,12 @@ def setTempHoldOff() {
     if (device.currentValue("raisethermostatSetpoint") == "On") {
     	//The device is a timer so use timer hold with 0 mins to turn off hold
         parent.childTimerHoldOn("0", device.deviceNetworkId)
+        runIn(5, refresh)
     }
     else {
     	//The device is a normal thermostat so use cancel hold
 		parent.childCancelHold(device.deviceNetworkId)
+        runIn(5, refresh)
     }
 	chooseSetTempOrSetHold()
     return cmds
@@ -652,28 +666,46 @@ def setTempHoldOff() {
 
 
 //These commands are used by Alexa
-def setHeatingSetpoint(int number) {
+def setHeatingSetpoint(number) {
 	def cmds = []
-	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
-	parent.childSetTemp(number.toString(), device.deviceNetworkId)
+    //First convert the requested temperature to an integer (it will round down)
+    def integerNumber = number.toInteger()
+    //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
+    if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
+    //Now update the parameter and then send to the thermostat
+	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
+	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+    runIn(5, refresh)
     return cmds
 }
-def setThermostatSetpoint(int number) {
+def setThermostatSetpoint(number) {
 	def cmds = []
-	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
-	parent.childSetTemp(number.toString(), device.deviceNetworkId)
+    //First convert the requested temperature to an integer (it will round down)
+    def integerNumber = number.toInteger()
+    //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
+    if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
+    //Now update the parameter and then send to the thermostat
+	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
+	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+    runIn(5, refresh)
     return cmds
 }
-def setTemperature(int number) {
+def setTemperature(number) {
 	def cmds = []
-	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
-	parent.childSetTemp(number.toString(), device.deviceNetworkId)
+    //First convert the requested temperature to an integer (it will round down)
+    def integerNumber = number.toInteger()
+    //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
+    if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
+    //Now update the parameter and then send to the thermostat
+	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
+	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+    runIn(5, refresh)
     return cmds
 }
 
@@ -686,9 +718,9 @@ private timeStringToMins(String timeString){
     }
 }
 
-private minsToTimeString(Integer intMins) {
+private minsToTimeString(intMins) {
     //log.debug intMins
-	def timeString =  "${(intMins/60).toInteger()}:${(intMins%60).toString().padLeft(2, "0")}"
+	def timeString =  "${(intMins.toInteger()/60).toInteger()}:${(intMins.toInteger()%60).toString().padLeft(2, "0")}"
     if (state.debug) log.debug "${intMins} converted to ${timeString}"
     return timeString
 }
@@ -702,10 +734,10 @@ private timeStringToHoursMins(String timeString){
     }
 }
 
-private minsToHoursMins(Integer intMins) {
+private minsToHoursMins(intMins) {
 	def hoursMins = []
-    hoursMins << (intMins/60).toInteger()
-    hoursMins << (intMins%60).toInteger()
+    hoursMins << (intMins.toInteger()/60).toInteger()
+    hoursMins << (intMins.toInteger()%60).toInteger()
     if (state.debug) log.debug "${intMins} converted to ${hoursMins[0]}:${hoursMins[1]}" 
     return hoursMins
 }
@@ -741,9 +773,4 @@ def setCoolingSetpoint(number) {
 }
 def auto() {
 	log.debug "auto()"
-}
-
-//This shouldnt be needed any more
-def ensureAlexaCapableMode() {
-	sendEvent(name: "thermostatMode", value: "heat")
 }
