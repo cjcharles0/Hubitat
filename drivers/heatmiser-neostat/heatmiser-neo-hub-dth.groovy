@@ -256,14 +256,15 @@ def childRequestingRefresh(String dni) {
     getAction("{\"INFO\":\"${deviceid}\"}", dni)
 }
 def childAwayOn(String dni) {
-    //Do not use, use FrontOn instead
+    //Do not use, use FrostOn instead
     //Send Child Away on command
     def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting away mode on for child ${deviceid}"
     getAction("{\"AWAY_ON\":\"${deviceid}\"}", dni)
+    //runIn(3, childRequestingRefresh, [data: dni])
 }
 def childAwayOff(String dni) {
-    //Do not use, use FrontOff instead
+    //Do not use, use FrostOff instead
     //Send Child Away off command
     def deviceid = getDeviceIDfromDNI(dni)
     log.debug "Requesting away mode off for child ${deviceid}"
