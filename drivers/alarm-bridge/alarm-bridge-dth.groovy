@@ -431,12 +431,13 @@ def sendData(message) {
         // name will be the DNI and value will be the switch status
         def name  = parts.length>0?parts[0].trim():null
         def value = parts.length>0?parts[1].trim():null
+        log.debug name
         if (value == "on") {
             // First set switch back to off if we can find the correct child device
             try
             {
                 def childdevice = getChildDevices()?.find { it.deviceNetworkId == name }
-                //childdevice.off()
+                childdevice.off()
             }
             catch (e)
             {
