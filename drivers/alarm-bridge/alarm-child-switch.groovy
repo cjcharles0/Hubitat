@@ -26,12 +26,16 @@ metadata {
 def on() {
 	sendEvent(name: "switch", value: "on")
 	sendData("on")
-	runIn(2, off)
+	//runIn(2, off)
 }
 
 def off() {
-	sendEvent(name: "switch", value: "off")
 	sendData("off")
+    runIn(2, off_update)
+}
+
+def off_update() {
+	sendEvent(name: "switch", value: "off")
 }
 
 def sendData(String value) {
