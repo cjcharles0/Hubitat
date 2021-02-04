@@ -16,6 +16,8 @@ This code has been written to interface an ESP8266 based bridge into Hubitat. It
 9) For those wanting to donate then my beer fund would gladly appreciate it :) - https://paypal.me/cjcharles
 
 ## Installation Instructions
+If you are migrating from ST you can jump to step 6.
+
 1) Turn on the ESP by plugging into Micro USB (do not use Micro USB when connecting to a serial alarm like Visonic) and you will see a WiFi Access Point created, called "AlarmPanelBridge" (it might take a minute to appear). Connect to this access point (no password needed) and navigate to 192.168.4.1 (should be automatic on most phones if you try and use the access point for browsing). On the page that appears, you should select your own WiFi network (2.4GHz only) by choosing from the menus and adding your password.
 
 2) After this is complete you should see the ESP connect to your router (and should even be visible from within Windows as a Network device under the 'Network' view. Update the router so that this device is always given the same IP address, this is called a DHCP reservation - without it you may find things stop working after IP addresses change. It may take some time for the router to detect the Wemos, but if you cannot see the AlarmPanelBridge access point then the Wemos should be connected to your WiFi (it broadcasts its access point when a connection to your entered WiFi details is not possible).
@@ -37,10 +39,12 @@ Now continue with Step 4 for Visonic alarms or Step 5 for others:
 
 5) Set up your (non-Visonic) ESP based device so that it can control your alarm from its webpage control panel. Once you can control the alarm (and see status information) you can now proceed to the following steps.
 
-6) Install the Device Handlers into Hubitat through Package Manager (or individually install the two device handlers in this folder). Copy from raw and paste as code, nothing else should need to be changed at this stage.
+6) Install the Device Handlers into Hubitat through Package Manager (or individually install the two device handlers in this folder). Copy from raw and paste as code into your Hubitat dashboard, nothing else should need to be changed at this stage.
 
-7) Create a new virtual device in Hubitat (top of the Devices page) and give it a name of your choosing. Set the Network ID (DNI) to be the MAC address you copied from step 3 (this should be entered in capital letters and without colons i.e. AABBCCDDEEFF). Ensure it uses the Device Handler called 'Alarm Bridge' and press Save. Now you will need to add the IP address of the ESP and potentially add a Pre and/or Post name in the settings (e.g. putting Zone in PreName means that all created zones will have Zone added at the start of them - this will make them easier to identify in your device list.). I suggest not changing the inactivity timeout yet. Press save on these settings.
+7) Create a new virtual device in Hubitat (top of the Devices page) and give it a name of your choosing (E.g. Alarm panel). Set the Network ID (DNI) to be the MAC address of the ESP bridge that you copied from step 3 (this should be entered in capital letters and without colons i.e. AABBCCDDEEFF). Ensure it uses the Device Handler called 'Alarm Bridge' and press Save.
 
-8) Now on the Alarm Bridge Device page you can press 'Refresh' and 'Configure' - this should populate some basic information and tell the ESP the address of your Hubitat hub. Now you can press Create Child Zones and it will create child devices for each zone (and extra's for alarm control if you enabled that option in the settings page).
+8) Now you open the Device page for your new virtual device (Alarm panel) in the Hubitat dashboard and add the configuration/preferences information. Add the IP address of the ESP bridge, configure the settings about HSM sync and child devices (I recommend both being enabled), add a Pre and/or Post name in the settings (e.g. putting Zone in PreName means that all created zones will have Zone added at the start of them - this will make them easier to identify in your device list). I suggest not changing the inactivity timeout yet. Press save on these settings/preferences.
 
-9) You should finally have a fully linked Alarm inside Hubitat and have child devices for each zone and to control the different arm states (plus attributes to see useful alarm information such as problems and user actions)
+9) Now at the top of the same page you can press 'Refresh' and 'Configure' - this should populate some basic information and tell the ESP the address of your Hubitat hub (you should see some information appear on the right of the screen). Now you can press "Create Zone Devices" and it will create child devices for each zone (and extra's for alarm control if you enabled that option in the settings page).
+
+10) You should finally have a fully linked Alarm inside Hubitat and have child devices for zone status and controlling the different arm states (plus attributes to see useful alarm information such as problems and alarm status)
