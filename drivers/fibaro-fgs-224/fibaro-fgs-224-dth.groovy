@@ -62,6 +62,91 @@ fingerprint mfr:"010F", prod:"0204", deviceId: "1000", inClusters:"0x25,0x85,0x8
                     ["1" : "1 - Toggle, output synchronised to switch"],
                     ["2" : "2 - Toggle, every switch change toggles output"]
                 ]
+       
+        input name: "param24", type: "enum", defaultValue: "0", required: true,
+            title: "24 - Inputs orientation (Swap S1/S2)",
+       		options: [
+                    ["0" : "0 - Default"],
+                    ["1" : "1 - Reversed"]
+                ]
+       
+        input name: "param25", type: "enum", defaultValue: "0", required: true,
+            title: "25 - Output Orientation (Swap Q1/Q2)",
+       		options: [
+                    ["0" : "0 - Default"],
+                    ["1" : "1 - Reversed"]
+                ]
+       
+        input name: "param40", type: "number", range: "0..15", defaultValue: "15", required: true,
+            title: "40 - S1 Input Scenes Sent.\n" +
+                   "Default value: 15 (1+2=3 means scenes for single/double click are sent."
+       
+        input name: "param41", type: "number", range: "0..15", defaultValue: "15", required: true,
+            title: "41 - S2 Input Scenes Sent.\n" +
+                   "Default value: 15 (1+2=3 means scenes for single/double click are sent."
+       
+        input name: "param150", type: "enum", defaultValue: "0", required: true,
+            title: "150 - First channel operating mode",
+       		options: [
+                    ["0" : "0 - Standard operation"],
+                    ["1" : "1 - Delayed off"],
+                    ["2" : "2 - Auto off"],
+                    ["3" : "3 - Flashing"]
+                ]
+       
+        input name: "param151", type: "enum", defaultValue: "0", required: true,
+            title: "151 - Second channel operating mode",
+       		options: [
+                    ["0" : "0 - Standard operation"],
+                    ["1" : "1 - Delayed off"],
+                    ["2" : "2 - Auto off"],
+                    ["3" : "3 - Flashing"]
+                ]
+       
+        input name: "param152", type: "enum", defaultValue: "0", required: true,
+            title: "152 - First channel reaction to input change in delayed/auto OFF modes",
+       		options: [
+                    ["0" : "0 - Cancel mode and set default state"],
+                    ["1" : "1 - No reaction, mode runs until it ends"],
+                    ["2" : "2 - Reset timer, start from the beginning"]
+                ]
+       
+        input name: "param153", type: "enum", defaultValue: "0", required: true,
+            title: "153 - Second channel reaction to input change in delayed/auto OFF modes",
+       		options: [
+                    ["0" : "0 - Cancel mode and set default state"],
+                    ["1" : "1 - No reaction, mode runs until it ends"],
+                    ["2" : "2 - Reset timer, start from the beginning"]
+                ]
+       
+        input name: "param154", type: "number", range: "0..65535", defaultValue: "5", required: true,
+            title: "154 - First channel time for delayed/auto OFF/flashing\n" +
+                   "0.1s steps for auto off or cycle period."
+       
+        input name: "param155", type: "number", range: "0..65535", defaultValue: "5", required: true,
+            title: "155 - Second channel time for delayed/auto OFF/flashing\n" +
+                   "0.1s steps for auto off or cycle period."
+       
+        input name: "param162", type: "enum", defaultValue: "0", required: true,
+            title: "162 - Q1 output type",
+       		options: [
+                    ["0" : "0 - Normally Open"],
+                    ["1" : "1 - Normally closed"]
+                ]
+       
+        input name: "param163", type: "enum", defaultValue: "0", required: true,
+            title: "163 - Q2 output type",
+       		options: [
+                    ["0" : "0 - Normally Open"],
+                    ["1" : "1 - Normally closed"]
+                ]
+       
+        input name: "param164", type: "enum", defaultValue: "0", required: true,
+            title: "164 - Lock simultaneous switching of Q1 and Q2 outputs",
+       		options: [
+                    ["0" : "0 - Lock disabled"],
+                    ["1" : "1 - Lock enabled"]
+                ]
     }
 }
 
@@ -355,18 +440,29 @@ def configure() {
 	log.debug "Executing 'configure'"
     def cmds = []
     
-    //cmds << secureCmd(zwave.configurationV1.configurationSet(parameterNumber:1, configurationValue:[param1.value], size: 1))//.format()
-
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param1.toInteger(), parameterNumber:1, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param20.toInteger(), parameterNumber:20, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param21.toInteger(), parameterNumber:21, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param24.toInteger(), parameterNumber:24, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param25.toInteger(), parameterNumber:25, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param40.toInteger(), parameterNumber:40, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param41.toInteger(), parameterNumber:40, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param150.toInteger(), parameterNumber:150, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param151.toInteger(), parameterNumber:151, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param152.toInteger(), parameterNumber:152, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param153.toInteger(), parameterNumber:153, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param154.toInteger(), parameterNumber:154, size: 2))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param155.toInteger(), parameterNumber:155, size: 2))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param162.toInteger(), parameterNumber:162, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param163.toInteger(), parameterNumber:163, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param164.toInteger(), parameterNumber:164, size: 1))
     
     return delayBetween(cmds, 500)
 }
 
-def updateSingleparam(paramNum, paramValue) {
-//	log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
-    	zwave.configurationV1.configurationSet(parameterNumber: paramNum, ConfigurationValue: paramValue)
+def updateSingleparam(paramNum, paramValue, paramSize) {
+	//log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
+    secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
 }
 
 /**
