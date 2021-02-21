@@ -1,0 +1,18 @@
+{
+  "packageName": "Fibaro Double Smart FGS-222",
+  "author": "cjcharles0",
+  "minimumHEVersion": "1.1",
+  "dateReleased": "2020-12-01",
+  "version": "1.00",
+  "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgs-222",
+  "communityLink": "",
+  "drivers": [
+    {
+      "id": "7cbba7a0-25a8-46d5-9209-8f48ec8add24",
+      "name": "Fibaro Double Smart FGS-222",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/fibaro-fgs-222/fibaro-fgs-222-dth.groovy",
+      "required": true
+    }
+  ]
+}
