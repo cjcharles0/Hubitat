@@ -7,7 +7,7 @@
  */
  
 metadata {
-definition (name: "Fibaro Double Relay FGS-222", namespace: "erocm123", author: "Eric, Robin and Chris") {
+definition (name: "Fibaro Double Relay FGS-222", namespace: "cjcharles0", author: "Eric, Robin and Chris") {
 capability "Switch"
 capability "Relay Switch"
 capability "Polling"
@@ -25,9 +25,9 @@ command "off2"
     
 command "CreateChildren"
 command "RemoveChildren"
-command "childOn"
-command "childOff"
-command "childRefresh"
+command "componentOn"
+command "componentOff"
+command "componentRefresh"
     
 command "updateSingleParam" // This custom command can be used with Rule Machine or webCoRE, to send parameter values (paramNr & paramvalue) to the device
 
@@ -211,25 +211,13 @@ def CreateChildren()
 {
      try {
         for (i in 1..2) {
-	       addChildDevice("Metering Switch Child Device", "${device.deviceNetworkId}-ep${i}",
+	       addChildDevice("hubitat", "Generic Component Switch", "${device.deviceNetworkId}-ep${i}",
 		      [completedSetup: true, label: "${device.displayName} (S${i})",
 		      isComponent: false, componentName: "ep$i", componentLabel: "Switch $i"])
         }
     } catch (e) {
-        log.debug e
-	    runIn(2, "sendAlert")
+         log.debug "Didnt create children for some reason: ${e}"
     }
-}
-
-private sendAlert()
-{
-   sendEvent(
-      descriptionText: "Child device creation failed. Please make sure that the \"Metering Switch Child Device\" is installed and published.",
-	  eventType: "ALERT",
-	  name: "childDeviceCreation",
-	  value: "failed",
-	  displayed: true,
-   )
 }
 
 def RemoveChildren()
@@ -257,10 +245,10 @@ def RemoveChildren()
 	}
 }
 
-def childOn(String dni)
+def componentOn(child)
 {
-    log.debug "childOn(${dni})"
-    if (dni.substring(dni.length()-3) == "ep2") {
+    log.debug "componentOn(${child.deviceNetworkId})"
+    if (child.deviceNetworkId.substring(child.deviceNetworkId.length()-3) == "ep2") {
         on2()
     }
     else {
@@ -268,15 +256,20 @@ def childOn(String dni)
     }
 }
 
-def childOff(String dni)
+def componentOff(child)
 {
-    log.debug "childOff(${dni})"
-    if (dni.substring(dni.length()-3) == "ep2") {
+    log.debug "componentOff(${child.deviceNetworkId})"
+    if (child.deviceNetworkId.substring(child.deviceNetworkId.length()-3) == "ep2") {
         off2()
     }
     else {
         off1()
     }
+}
+
+def componentRefresh(child)
+{
+    log.debug "componentRefresh(${child.deviceNetworkId})"
 }
 
 def updateChild(String ep, String status)
@@ -296,6 +289,7 @@ def updateChild(String ep, String status)
     }
     else
     {
+        //Status is off, so check if the other endpoint is off and update the combined status
         def otherep = ep=="1" ? "switch2" : "switch1"
         if (device.currentState(otherep).getValue() == "off")
         {
@@ -560,7 +554,7 @@ def off() {
 
 def on1() {
     log.debug "on1"
-    updateChild("1", "on")
+    //updateChild("1", "on")
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:1, parameter:[255]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
@@ -569,8 +563,8 @@ def on1() {
 
 def off1() {
     log.debug "off1"
-    updateChild("1", "off")
-//    zwave.basicV1.basicSet(value: 0x00, destinationEndPoint:1)
+    //updateChild("1", "off")
+    //zwave.basicV1.basicSet(value: 0x00, destinationEndPoint:1)
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:1, parameter:[0]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
@@ -579,7 +573,7 @@ def off1() {
 
 def on2() {
     log.debug "on2"
-    updateChild("2", "on")
+    //updateChild("2", "on")
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:1, parameter:[255]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
@@ -588,7 +582,7 @@ def on2() {
 
 def off2() {
     log.debug "off2"
-    updateChild("2", "off")
+    //updateChild("2", "off")
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:1, parameter:[0]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
