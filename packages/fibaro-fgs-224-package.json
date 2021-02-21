@@ -3,7 +3,7 @@
   "author": "cjcharles0",
   "minimumHEVersion": "1.1",
   "dateReleased": "2020-12-01",
-  "version": "1.00",
+  "version": "1.01",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgs-224",
   "communityLink": "https://community.hubitat.com/t/fibaro-fgs-224/59108",
   "drivers": [
@@ -12,13 +12,6 @@
       "name": "Fibaro Double Smart FGS-224",
       "namespace": "cjcharles0",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/fibaro-fgs-224/fibaro-fgs-224-dth.groovy",
-      "required": true
-    },
-    {
-      "id": "b579004a-b2f0-4ddf-9e3e-f7ee23d787e2",
-      "name": "Metering Switch Child Device",
-      "namespace": "ericm123",
-      "location": "https://raw.githubusercontent.com/erocm123/Hubitat/master/Drivers/metering-switch-child-device.src/metering-switch-child-device.groovy",
       "required": true
     }
   ]
