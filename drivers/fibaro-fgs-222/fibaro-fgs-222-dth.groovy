@@ -328,7 +328,7 @@ def parse(String description)
     if (cmd)
     {
         result += zwaveEvent(cmd)
-        log.debug "Parsed ${cmd} to ${result.inspect()}"
+        //log.debug "Parsed ${cmd} to ${result.inspect()}"
     }
     else
     {
@@ -355,7 +355,6 @@ def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd)
     result << zwave.multiChannelV3.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
     response(delayBetween(result, 500)) // returns the result of reponse()
 }
-
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport cmd) 
 {
@@ -429,8 +428,7 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
 }
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap cmd) {
-    log.debug "hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap ${cmd}"
-    log.debug "dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
+    log.debug "zwave.multichannelv4.MultiChannelCmdEncap ${cmd} - dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
     if (cmd.sourceEndPoint == 2 ) {
         if (cmd.parameter.first() > 180) {
             updateChild("2", "on")
@@ -492,7 +490,7 @@ def poll() {
 }
 
 def configure() {
-//	log.debug "Executing 'configure'"
+	log.debug "Executing 'configure'"
     def cmds = []
 
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param1.toInteger(), parameterNumber:1, size: 1))
@@ -531,9 +529,9 @@ def configure() {
     return delayBetween(cmds, 500)
 }
 
-def updateSingleparam(paramNum, paramValue) {
-//	log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
-    secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, ConfigurationValue: paramValue))
+def updateSingleparam(paramNum, paramValue, paramSize) {
+	//log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
+    secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
 }
 
 /**
@@ -541,9 +539,10 @@ def updateSingleparam(paramNum, paramValue) {
 */
 def updated()
 {
-//	log.debug "Preferences have been changed. Attempting configure()"
-    def cmds = configure()
-    response(cmds)
+	log.debug "Preferences have been changed. Attempting configure()"
+    configure()
+    //def cmds = configure()
+    //response(cmds)
 }
 
 def on() {
