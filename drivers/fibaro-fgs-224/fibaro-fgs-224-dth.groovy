@@ -9,8 +9,8 @@
 metadata {
 definition (name: "Fibaro Double Smart FGS-224", namespace: "cjcharles0", author: "Chris (help from Eric and Robin)") {
 capability "Switch"
-capability "Relay Switch"
-capability "Polling"
+//capability "Relay Switch"
+//capability "Polling"
 capability "Configuration"
 capability "Refresh"
 capability "Zw Multichannel"
@@ -29,7 +29,7 @@ command "componentOn"
 command "componentOff"
 command "componentRefresh"
 
-//command "updateSingleParam" // This custom command can be used with Rule Machine or webCoRE, to send parameter values (paramNr & paramvalue) to the device
+command "updateSingleParam" // This custom command can be used with Rule Machine or webCoRE, to send parameter values (paramNr & paramvalue) to the device
 
 // device type 516 = 0x0204, manufacturer 271 = 0x010F, 4096 = 0x1000
 fingerprint mfr:"010F", prod:"0204", deviceId: "1000", inClusters:"0x5E,0x55,0x98,0x9F,0x56,0x6C,0x22"
@@ -213,6 +213,7 @@ def componentOff(child)
 def componentRefresh(child)
 {
     log.debug "componentRefresh(${child.deviceNetworkId})"
+    refresh()
 }
 
 def updateChild(String ep, String status)
@@ -298,7 +299,6 @@ def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd)
     response(delayBetween(result, 500)) // returns the result of reponse()
 }
 
-/*
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport cmd) 
 {
     log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport ${cmd}"
@@ -321,7 +321,6 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityRepor
         }
     }
 }
-*/
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityReport cmd) 
 {
@@ -346,7 +345,6 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityRepor
     }
 }
 
-/*
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
     log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap ${cmd}"
     def map = [ name: "switch$cmd.sourceEndPoint" ]
@@ -371,11 +369,9 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
         }
     }
 }
-*/
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap cmd) {
-    log.debug "hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap ${cmd}"
-    log.debug "dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
+    log.debug "zwave.multichannelv4.MultiChannelCmdEncap ${cmd} - dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
     if (cmd.sourceEndPoint == 2 ) {
         if (cmd.parameter.first() > 180) {
             updateChild("2", "on")
@@ -439,7 +435,7 @@ def poll() {
 def configure() {
 	log.debug "Executing 'configure'"
     def cmds = []
-    
+
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param1.toInteger(), parameterNumber:1, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param20.toInteger(), parameterNumber:20, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param21.toInteger(), parameterNumber:21, size: 1))
@@ -470,7 +466,7 @@ def updateSingleparam(paramNum, paramValue, paramSize) {
 */
 def updated()
 {
-//	log.debug "Preferences have been changed. Attempting configure()"
+	log.debug "Preferences have been changed. Attempting configure()"
     configure()
     //def cmds = configure()
     //response(cmds)
@@ -534,13 +530,16 @@ def off2() {
 
 
 String secureCmd(cmd) {
-    if (getDataValue("zwaveSecurePairingComplete") == "false") {
+    if ((getDataValue("zwaveSecurePairingComplete") == "false") || (getDataValue("zwaveSecurePairingComplete") == null)){
+        //log.debug "insecure ${cmd}"
         return cmd.format()
     }
     else if (getDataValue("zwaveSecurePairingComplete") == "true" && getDataValue("S2") == null) {
+        //log.debug "security-v1 ${cmd}"
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
     }
     else {
+        //log.debug "secure ${cmd}"
 		return secure(cmd)
     }	
 }
@@ -553,7 +552,7 @@ String secure(hubitat.zwave.Command cmd){
     return zwaveSecureEncap(cmd)
 }
 
-void zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd){
+def zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd){
     hubitat.zwave.Command encapCmd = cmd.encapsulatedCommand(commandClassVersions)
     if (encapCmd) {
         zwaveEvent(encapCmd)
