@@ -195,11 +195,11 @@ fingerprint deviceId: "0x1001", inClusters:"0x86, 0x72, 0x85, 0x60, 0x8E, 0x25, 
     input name: "paramAssociationGroup1", type: "bool", defaultValue: false, required: true,
              title: "The Fibaro Sigle Switch provides the association of three groups.\n\n" +
                     "1st group is assigned to key no. 1.\n" +
-                    "Default value: true"
+                    "Default value: false (true officially)"
 
         input name: "paramAssociationGroup2", type: "bool", defaultValue: false, required: true,
              title: "2nd group is assigned to key no. 2.\n" +
-                    "Default value: true"
+                    "Default value: false (true officially)"
 
         input name: "paramAssociationGroup3", type: "bool", defaultValue: false, required: true,
              title: "3rd group reports state of devices. Only one device can be associated to this group.\n" +
