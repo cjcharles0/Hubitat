@@ -9,8 +9,8 @@
 metadata {
 definition (name: "Fibaro Double Relay FGS-222", namespace: "cjcharles0", author: "Eric, Robin and Chris") {
 capability "Switch"
-capability "Relay Switch"
-capability "Polling"
+//capability "Relay Switch"
+//capability "Polling"
 capability "Configuration"
 capability "Refresh"
 capability "Zw Multichannel"
@@ -270,6 +270,7 @@ def componentOff(child)
 def componentRefresh(child)
 {
     log.debug "componentRefresh(${child.deviceNetworkId})"
+    refresh()
 }
 
 def updateChild(String ep, String status)
@@ -513,9 +514,19 @@ def configure() {
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param41.toInteger(), parameterNumber:41, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param42.toInteger(), parameterNumber:42, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param43.toInteger(), parameterNumber:43, size: 1))
-    cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:1, nodeId:[zwaveHubNodeId]))
-    cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:[zwaveHubNodeId]))
-    cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:[zwaveHubNodeId]))
+    
+    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    if (paramAssociationGroup1) {
+        cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:1, nodeId:[zwaveHubNodeId])) //0,1,2,3
+    }
+    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    if (paramAssociationGroup2) {
+        cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:[zwaveHubNodeId])) //0,1,2,3
+    }
+    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    if (paramAssociationGroup3) {
+        cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:[zwaveHubNodeId])) //0,1,2,3
+    }
     
     return delayBetween(cmds, 500)
 }
@@ -591,13 +602,16 @@ def off2() {
 
 
 String secureCmd(cmd) {
-    if (getDataValue("zwaveSecurePairingComplete") == "false") {
+    if ((getDataValue("zwaveSecurePairingComplete") == "false") || (getDataValue("zwaveSecurePairingComplete") == null)){
+        //log.debug "insecure ${cmd}"
         return cmd.format()
     }
     else if (getDataValue("zwaveSecurePairingComplete") == "true" && getDataValue("S2") == null) {
+        //log.debug "security-v1 ${cmd}"
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
     }
     else {
+        //log.debug "secure ${cmd}"
 		return secure(cmd)
     }	
 }
@@ -610,7 +624,7 @@ String secure(hubitat.zwave.Command cmd){
     return zwaveSecureEncap(cmd)
 }
 
-void zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd){
+def zwaveEvent(hubitat.zwave.commands.supervisionv1.SupervisionGet cmd){
     hubitat.zwave.Command encapCmd = cmd.encapsulatedCommand(commandClassVersions)
     if (encapCmd) {
         zwaveEvent(encapCmd)
