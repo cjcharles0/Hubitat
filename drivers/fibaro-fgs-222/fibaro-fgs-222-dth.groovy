@@ -517,11 +517,11 @@ def configure() {
     if (paramAssociationGroup1) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:1, nodeId:[zwaveHubNodeId])) //0,1,2,3
     }
-    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 2, nodeId: []))
     if (paramAssociationGroup2) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:[zwaveHubNodeId])) //0,1,2,3
     }
-    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 2, nodeId: []))
     if (paramAssociationGroup3) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:[zwaveHubNodeId])) //0,1,2,3
     }
