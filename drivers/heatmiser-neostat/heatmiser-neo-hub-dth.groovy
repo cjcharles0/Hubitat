@@ -398,7 +398,7 @@ def parse(response) {
 
 def processResponse(response)
 {
-    def map = [: ]
+    def map = [:]
     def events = []
     def cmds = []
 
@@ -410,6 +410,10 @@ def processResponse(response)
     }
     catch (e) {
         log.debug "Couldnt process, probably partial packet: ${e}"
+    }
+    
+    if (result == null) {
+        return
     }
     
     def requestingDeviceName = device.getDataValue("requestingDevice")
