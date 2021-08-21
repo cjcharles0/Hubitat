@@ -543,7 +543,7 @@ private handleAlarmStatus(result)
 			log.debug "Exit Delay Status found"
 			break
 
-		case ["Delay Alarm", "Confirm Alarm", "Perimeter Alarm"]:
+		case ["Delay Alarm", "Confirm Alarm", "Perimeter Alarm", "Interior Alarm", "Tamper Alarm", "24h Silent Alarm", "24h Audible Alarm", "Panic From Keyfob", "Panic From Control Panel", "Duress"]:
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
