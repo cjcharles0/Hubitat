@@ -14,9 +14,6 @@
  *
  *  Author: Chris Charles (cjcharles0)
  *  Date: 2017-04-26
- *  
- *  Important note, since each command is requesting something from the server, they cannot be void's otherwise
- *  nothing seems to come back from ST, even though it should receive the JSON anyway
  */
 
 import groovy.json.JsonSlurper
@@ -30,12 +27,8 @@ metadata {
 		capability "Temperature Measurement"
 		capability "Thermostat"
         
-        //capability "Actuator"
-        //capability "Relay Switch"
-        //capability "Switch"
         
 		command "push"
-        
         command "refresh" //This is used for the overall refresh process
         
         command "boostOneHour" // Custom
@@ -77,7 +70,9 @@ metadata {
 		attribute "nextSetpointText", "string" // Custom for text display
 		attribute "statusText", "string" // Custom for neohub response
         
-        attribute "manualSetpoint","string"
+		attribute "awayholiday", "string"
+		attribute "floortemp", "number"
+        
         
   		attribute "temperature","number" // Temperature Measurement
 		attribute "thermostatSetpoint","number" // Thermostat setpoint      
@@ -130,14 +125,11 @@ metadata {
             }
 		}
        
-		valueTile("manualSetpoint", "device.manualSetpoint", width: 1, height: 1, decoration: "flat") {
-			state "default", label:'${currentValue}', unit:"dC", backgroundColor:"#ffffff"
-		}
 		standardTile("raisethermostatSetpoint", "device.raisethermostatSetpoint", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"SetpointUp", label:'${currentValue}'//, icon:"st.thermostat.thermostat-up"
+			state "default", action:"SetpointUp", label:'+1C'//, icon:"st.thermostat.thermostat-up"
 		}
 		standardTile("lowerthermostatSetpoint", "device.lowerthermostatSetpoint", width: 1, height: 1, decoration: "flat") {
-			state "default", action:"SetpointDown", label:'${currentValue}'//, icon:"st.thermostat.thermostat-down"
+			state "default", action:"SetpointDown", label:'-1C'//, icon:"st.thermostat.thermostat-down"
 		}
         
 		standardTile("increaseTime", "device.increaseTime", width: 1, height: 1, decoration: "flat") {
@@ -182,7 +174,7 @@ metadata {
 		details(
 				[
 				"temperatureDisplay",
-				"lowerthermostatSetpoint", "manualSetpoint", "raisethermostatSetpoint",
+				"lowerthermostatSetpoint", "raisethermostatSetpoint",
                 "decreaseTime", "holdtime", "increaseTime", 
 				"nextSetpointText", "setTempHold", "refresh", 
                 "awayholiday", "floortemp", "statusText"])
@@ -242,9 +234,6 @@ def updated()
     
     cmds << sendEvent(name: "holdtime", value: "0:00")
     
-    cmds << sendEvent(name: "manualSetpoint", value: "19°C")
-    cmds << sendEvent(name: "raisethermostatSetpoint", value: "+1°C")
-    cmds << sendEvent(name: "lowerthermostatSetpoint", value: "-1°C")
     
     cmds << sendEvent(name: "temperature", value: "5")
     cmds << sendEvent(name: "thermostatSetpoint", value: "5")
@@ -300,62 +289,6 @@ def processNeoResponse(response)
 
         if (response.containsKey("STAT_MODE")) {
         	//This is used to identify what type of device it is
-			if (response.STAT_MODE.containsKey("TIMECLOCK")) {
-                if (response.STAT_MODE.TIMECLOCK == true) {
-                	//This device is a timer so lets update it (starting by setting it to On/Off mode)
-                    cmds << sendEvent(name: "raisethermostatSetpoint", value: "On", displayed: false)
-                    cmds << sendEvent(name: "lowerthermostatSetpoint", value: "Off", displayed: false)
-                    if (response.DEVICE_TYPE == 7) {
-                    	//Device is a Timeclock
-                        cmds << sendEvent(name: "manualSetpoint", value: "Timer Boost 1h", displayed: false)
-                    }
-                    else if (response.DEVICE_TYPE == 6) {
-                    	//Device is a Neoplug
-                        cmds << sendEvent(name: "manualSetpoint", value: "Neoplug Control", displayed: false)
-                    }
-
-                    if (response.containsKey("HOLD_TIME") && response.containsKey("HOLD_TEMPERATURE")) {
-                    	//Update the set temp text or holding time
-                        def onoffstring
-                        if (response.containsKey("TIMER")) {
-                        	//Update the on/off string here, but not needed as shouldnt be relevant
-                            if (response.TIMER) {
-                            	onoffstring = "ON"
-                                cmds << sendEvent(name: "thermostatOperatingState", value: "heating", displayed: true)
-                            }
-                            else {
-                            	 onoffstring = "OFF"
-                                 cmds << sendEvent(name: "thermostatOperatingState", value: "idle", displayed: true)
-                            }
-                        }
-						cmds << sendEvent(name: "temperature", value: onoffstring, displayed: true)
-                        cmds << sendEvent(name: "thermostatSetpoint", value: onoffstring, displayed: false)
-                        cmds << sendEvent(name: "heatingSetpoint", value: onoffstring, displayed: false)
-                        cmds << sendEvent(name: "coolingSetpoint", value: onoffstring, displayed: false)
-                        if (response.HOLD_TIME == "0:00") {
-                            //Here we have zero hold time so run until next on time
-                            statusTextmsg = "Running to schedule or manual mode"
-                            //Now send the update
-                            cmds << sendEvent(name: "nextSetpointText", value: statusTextmsg)
-                            //Lastly if we are here then there should be no holds in place - hence ensure the button doesn't say cancel hold
-                            chooseSetTempOrSetHold()
-                        }
-                        else {
-                            //Here we do have a hold time so display hold info
-                            statusTextmsg = "Holding " + onoffstring + " for " + response.HOLD_TIME
-                            cmds << sendEvent(name: "nextSetpointText", value: statusTextmsg, displayed: false)
-        					cmds << sendEvent(name: "setTempHold", value: "cancelHold", displayed: false)
-                        }
-                    }
-                }
-                else {
-                	//Here we should check that the +/- temp buttons are set to +/- rather than on/off (sometimes heatmiser messes this up)
-                    if (device.currentValue("raisethermostatSetpoint") == "+1°C") {
-                        cmds << sendEvent(name: "raisethermostatSetpoint", value: "+1°C", displayed: false)
-                        cmds << sendEvent(name: "lowerthermostatSetpoint", value: "-1°C", displayed: false)
-                    }
-                }
-			}
 			if (response.STAT_MODE.containsKey("THERMOSTAT")) {
                 if (response.STAT_MODE.THERMOSTAT == true) {
                 	//This device is a thermostat so lets update it!
@@ -404,7 +337,7 @@ def processNeoResponse(response)
                         cmds << sendEvent(name: "temperature", value: response.CURRENT_TEMPERATURE, displayed: true)
 
                         //Got a set temperature so update it if above 6 (legacy from old firmware setting 5 for away mode, but keeping it for now)
-                        def settempint = response.CURRENT_SET_TEMPERATURE.toBigDecimal().toInteger() + 0 //.toBigDecimal().toInteger()
+                        def settempint = response.CURRENT_SET_TEMPERATURE.toBigDecimal() //.toBigDecimal().toInteger()
                         if (settempint >= 6) {
                             cmds << sendEvent(name: "thermostatSetpoint", value: settempint, displayed: false)
                             cmds << sendEvent(name: "heatingSetpoint", value: settempint, displayed: false)
@@ -460,66 +393,21 @@ def durationDown() {
     return cmds
 }
 
-def SetpointUp() {
+def SetpointUpzz() {
 	//Called by tile to increase set temp box
 	def cmds = []
-    if (device.currentValue("raisethermostatSetpoint") == "On") {
-    	//The thermostat is a timer/plug so use timer on rather than changing temp
-        setTimerOn()
-    }
-    else {
-		def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "").toInteger() + 1
-    	cmds << sendEvent(name: "manualSetpoint", value: "${newtemp}°C")
-		chooseSetTempOrSetHold()
-    }
+	def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "") + 0.5
+    cmds << sendEvent(name: "manualSetpoint", value: "${newtemp}°C")
+	chooseSetTempOrSetHold()
     return cmds
 }
-def SetpointDown() {
+def SetpointDownzz() {
     //Called by tile to decrease set temp box
 	def cmds = []
-    if (device.currentValue("raisethermostatSetpoint") == "On") {
-    	//The thermostat is a timer/plug so use timer off rather than changing temp
-        setTimerOff()
-    }
-    else {
-		def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "").toInteger() - 1
-    	cmds << sendEvent(name: "manualSetpoint", value: "${newtemp}°C")
-		chooseSetTempOrSetHold()
-    }
+    def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "") - 0.5
+    cmds << sendEvent(name: "manualSetpoint", value: "${newtemp}°C")
+	chooseSetTempOrSetHold()
     return cmds
-}
-
-def setTimerOn() {
-	//We already know it is a timer/plug, so lets do something based on that
-	if (device.currentValue("manualSetpoint") == "Neoplug Control") {
-    	//The thermostat is a plug turn it on
-        parent.childTimerOn(device.deviceNetworkId)
-        runIn(5, refresh)
-    }
-    else {
-    	//Set it to boost for an hour as that is all we can do
-        parent.childTimerHoldOn("60", device.deviceNetworkId)
-        runIn(5, refresh)
-    }
-}
-def setTimerOff() {
-	//We already know it is a timer/plug, so lets do something based on that
-	if (device.currentValue("manualSetpoint") == "Neoplug Control") {
-    	//The thermostat is a plug turn it on
-		parent.childTimerOff(device.deviceNetworkId)
-        runIn(5, refresh)
-    }
-    else {
-    	//Set it to boost for an hour as that is all we can do
-        parent.childTimerHoldOff("60", device.deviceNetworkId)
-        runIn(5, refresh)
-    }
-}
-private on() {
-	setTimerOn()
-}
-private off() {
-	setTimerOff()
 }
 
 def away() {
@@ -589,9 +477,9 @@ def boostHours(int durationHours) {
 
 def boostTempHours(int desiredTemp, int desiredHours) {
 	//Boost to chosen target for chosen time
-    //If these are set to 0 then it will use defaults of 1 hour and rounddown(temperature)+2 (since that will ensure the thermostat turns on with a 1 degree switching range)
+    //If these are set to 0 then it will use defaults of 1 hour and (temperature)+2 (since that will ensure the thermostat turns on with a 1 degree switching range)
     
-    if (desiredTemp==0) desiredTemp = device.currentValue("temperature").toInteger() + 2
+    if (desiredTemp==0) desiredTemp = device.currentValue("temperature") + 2
     //Also target 1 hour if not specified
     if (desiredHours==0) desiredHours = 1
     
@@ -603,7 +491,6 @@ def boostTempHours(int desiredTemp, int desiredHours) {
 def setTempHoldOn() {
 	def cmds = []
     def newtemp = device.currentValue("manualSetpoint").replaceAll("°C", "")
-    def isthermostat = (device.currentValue("raisethermostatSetpoint") == "On") ? false : true
     def currentholdtime = device.currentValue("holdtime")
     
     if (state.debug) log.debug "${device.label}: Set temp hold to ${newtemp} for ${currentholdtime} - setTempHoldOn()"
@@ -611,38 +498,22 @@ def setTempHoldOn() {
     if (currentholdtime == "0:00") {
     	//Hold time is zero, so use set temp or schedule override
 		cmds << sendEvent(name: "setTempHold", value: "tempWasSet", displayed: false, isStateChange: true)
-        if (isthermostat) {
-            //The device is a normal thermostat so use normal set temp
-            parent.childSetTemp(newtemp.toString(), device.deviceNetworkId)
-            runIn(5, refresh)
-        }
-        else {
-            //The device is a timer so use timer on for 0:00 (same as pressing on button)
-            setTimerOn()
-        }
+        parent.childSetTemp(newtemp.toString(), device.deviceNetworkId)
+        runIn(5, refresh)
     }
     else {
     	//Hold time is above zero, so hold for the chosen time (either timer or thermostat)
         if (state.debug) log.debug hours + "hours, " + minutes + "mins of hold time"
         cmds << sendEvent(name: "setTempHold", value: "cancelHold", displayed: false, isStateChange: true)
-        if (isthermostat) {
-            //The device is a normal thermostat so use normal hold
-            def hoursandmins = timeStringToHoursMins(currentholdtime)
-            parent.childHold(newtemp.toString(), hoursandmins[0], hoursandmins[1], device.deviceNetworkId)
-            runIn(5, refresh)
-        }
-        else {
-            //The device is a timer so use timer on but first convert h:mm into mmm
-            def minutes = timeStringToMins(currentholdtime).toString()
-            parent.childTimerHoldOn(minutes, device.deviceNetworkId)
-            runIn(5, refresh)
-        }
+        def hoursandmins = timeStringToHoursMins(currentholdtime)
+        parent.childHold(newtemp.toString(), hoursandmins[0], hoursandmins[1], device.deviceNetworkId)
+        runIn(5, refresh)
 	}
     //Also update the tile immediately (shouldn't really do this as should wait until the next update,
     //but if we dont do it now, then Alexa and Google Home get really confused)
-    if (isthermostat) cmds << sendEvent(name: "thermostatSetpoint", value: newtemp, displayed: false)
-	if (isthermostat) cmds << sendEvent(name: "heatingSetpoint", value: newtemp, displayed: false)
-	if (isthermostat) cmds << sendEvent(name: "coolingSetpoint", value: newtemp, displayed: false)
+    cmds << sendEvent(name: "thermostatSetpoint", value: newtemp, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: newtemp, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: newtemp, displayed: false)
     return cmds
 }
 
@@ -673,10 +544,10 @@ def setHeatingSetpoint(number) {
     //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
     if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
     //Now update the parameter and then send to the thermostat
-	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
-	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
+	parent.childSetTemp(number.toString(), device.deviceNetworkId)
     runIn(5, refresh)
     return cmds
 }
@@ -687,10 +558,10 @@ def setThermostatSetpoint(number) {
     //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
     if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
     //Now update the parameter and then send to the thermostat
-	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
-	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
+	parent.childSetTemp(number.toString(), device.deviceNetworkId)
     runIn(5, refresh)
     return cmds
 }
@@ -701,10 +572,10 @@ def setTemperature(number) {
     //If we were trying to increase the temperature then we need to add one (or we get stuck rounding down forever)
     if (number - device.currentValue("thermostatSetpoint") == 0.5) {integerNumber++}
     //Now update the parameter and then send to the thermostat
-	cmds << sendEvent(name: "thermostatSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "heatingSetpoint", value: integerNumber, displayed: false)
-	cmds << sendEvent(name: "coolingSetpoint", value: integerNumber, displayed: false)
-	parent.childSetTemp(integerNumber.toString(), device.deviceNetworkId)
+	cmds << sendEvent(name: "thermostatSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "heatingSetpoint", value: number, displayed: false)
+	cmds << sendEvent(name: "coolingSetpoint", value: number, displayed: false)
+	parent.childSetTemp(number.toString(), device.deviceNetworkId)
     runIn(5, refresh)
     return cmds
 }
