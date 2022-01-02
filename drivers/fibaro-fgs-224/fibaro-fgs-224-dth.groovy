@@ -433,6 +433,17 @@ def poll() {
 def configure() {
 	log.debug "Executing 'configure'"
     def cmds = []
+    
+    if(!state.association2 || state.association2 == "" || state.association2 == "1") {
+       log.debug "Setting association group 2"
+       cmds << zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:zwaveHubNodeId)
+       cmds << zwave.associationV2.associationGet(groupingIdentifier:2)
+    }
+    if(!state.association3 || state.association3 == "" || state.association3 == "2") {
+       log.debug "Setting association group 3"
+       cmds << zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:zwaveHubNodeId)
+       cmds << zwave.associationV2.associationGet(groupingIdentifier:3)
+    }
 
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param1.toInteger(), parameterNumber:1, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param20.toInteger(), parameterNumber:20, size: 1))
