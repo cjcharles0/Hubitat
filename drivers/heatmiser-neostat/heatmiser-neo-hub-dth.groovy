@@ -76,15 +76,6 @@ metadata {
                 icon: "st.Home.home2"
         }
 
-        valueTile("stip", "stip", decoration: "flat", width: 2, height: 1) {
-            state "stip",
-                label: 'ST IP Addr:\r\n${currentValue}'
-        }
-        valueTile("neoip", "neoip", decoration: "flat", width: 2, height: 1) {
-            state "neoip",
-                label: 'Neohub IP Addr:\r\n${currentValue}'
-        }
-
         standardTile("refreships", "device.refreships", inactiveLabel: false, decoration: "flat", width: 1, height: 1) {
             state "default",
                 label: "Refresh IPs",
@@ -152,12 +143,12 @@ metadata {
     }
 
     main(["lastcommand"])
-    details(["lastcommand", "stip", "neoip", "refreships", "configure", "getthermostats", "removethermostats", "holidayOnOrCancel", "decreaseHours", "increaseHours", "decreaseDays", "increaseDays", "allaway", "refresh"])
+    details(["lastcommand", "refreships", "configure", "getthermostats", "removethermostats", "holidayOnOrCancel", "decreaseHours", "increaseHours", "decreaseDays", "increaseDays", "allaway", "refresh"])
 }
 
 def refresh()
 {
-    log.debug "Refreshing all children (done from Bridge)"
+    if (state.debug) log.debug "Refreshing all children (done from Bridge)"
     def counter = 1
     def dni
     getChildDevices().each
@@ -165,7 +156,7 @@ def refresh()
         dni = it.deviceNetworkId
         if (dni != null)
         {
-            log.debug "Requesting updated temperature information (${counter}) for ${dni}"
+            if (state.debug) log.debug "Requesting updated temperature information (${counter}) for ${dni}"
             it.refreshdelay(counter * 3)
             counter = counter + 1
         }
@@ -550,7 +541,7 @@ def holidayOnOrCancel() {
 
 //These functions are helper functions to talk to the NeoHub Bridge
 def getAction(uri, requestdevice) {
-    log.debug "uri ${uri}"
+    if (state.debug) log.debug "uri ${uri}"
     
     device.updateDataValue("requestingDevice", requestdevice)
     
