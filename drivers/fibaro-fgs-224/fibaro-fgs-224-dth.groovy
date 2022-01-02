@@ -436,11 +436,13 @@ def configure() {
     
     if(!state.association2 || state.association2 == "" || state.association2 == "1") {
        log.debug "Setting association group 2 to " + zwaveHubNodeId 
+       //cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier:2, nodeId:zwaveHubNodeId))
        cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:zwaveHubNodeId))
        cmds << secureCmd(zwave.associationV2.associationGet(groupingIdentifier:2))
     }
     if(!state.association3 || state.association3 == "" || state.association3 == "2") {
-       log.debug "Setting association group 3 to " + zwaveHubNodeId
+       log.debug "Setting association group 3 to " + zwaveHubNodeId 
+       //cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier:3, nodeId:zwaveHubNodeId))
        cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:zwaveHubNodeId))
        cmds << secureCmd(zwave.associationV2.associationGet(groupingIdentifier:3))
     }
@@ -540,15 +542,15 @@ def off2() {
 
 String secureCmd(cmd) {
     if ((getDataValue("zwaveSecurePairingComplete") == "false") || (getDataValue("zwaveSecurePairingComplete") == null)){
-        log.debug "insecure ${cmd}"
+        //log.debug "insecure ${cmd}"
         return cmd.format()
     }
     else if (getDataValue("zwaveSecurePairingComplete") == "true" && getDataValue("S2") == null) {
-        log.debug "security-v1 ${cmd}"
+        //log.debug "security-v1 ${cmd}"
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
     }
     else {
-        log.debug "secure ${cmd}"
+        //log.debug "secure ${cmd}"
 		return secure(cmd)
     }	
 }
