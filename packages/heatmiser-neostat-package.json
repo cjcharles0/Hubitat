@@ -20,6 +20,13 @@
       "namespace": "cjcharles0",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neo-thermostat-dth.groovy",
       "required": true
+    },
+    {
+      "id": "ed0664e4-7584-481f-bb8c-6c64438735d9",
+      "name": "Heatmiser Neo Plug",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/heatmiser-neostat/heatmiser-neo-plug-dth.groovy",
+      "required": false
     }
   ]
 }
