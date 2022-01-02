@@ -249,7 +249,7 @@ def updateChild(String ep, String status)
 	}
 	catch (e)
 	{
-		log.debug "Failed to find child called " + childName + " - exception ${e}"
+		log.debug "Failed to find child " + childName + " - exception ${e}"
 	}
 
 	if (curdevice == null)
