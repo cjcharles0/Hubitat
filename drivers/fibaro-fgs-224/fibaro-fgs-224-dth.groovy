@@ -442,7 +442,7 @@ def configure() {
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param24.toInteger(), parameterNumber:24, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param25.toInteger(), parameterNumber:25, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param40.toInteger(), parameterNumber:40, size: 1))
-    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param41.toInteger(), parameterNumber:40, size: 1))
+    cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param41.toInteger(), parameterNumber:41, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param150.toInteger(), parameterNumber:150, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param151.toInteger(), parameterNumber:151, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param152.toInteger(), parameterNumber:152, size: 1))
