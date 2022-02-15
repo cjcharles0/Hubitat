@@ -3,7 +3,7 @@
   "author": "cjcharles0",
   "minimumHEVersion": "1.1",
   "dateReleased": "2020-12-01",
-  "version": "1.03",
+  "version": "1.04",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgs-224",
   "communityLink": "https://community.hubitat.com/t/fibaro-fgs-224/59108",
   "drivers": [
