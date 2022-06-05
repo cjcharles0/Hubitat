@@ -37,6 +37,8 @@ fingerprint deviceId: "0x1001", inClusters:"0x86, 0x72, 0x85, 0x60, 0x8E, 0x25, 
     
    preferences {
 
+	input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+
         input name: "param1", type: "enum", defaultValue: "255", required: true,
             title: "Parameter No. 1 - Activate / deactivate functions ALL ON / ALL OFF. Default value: 255.",
        		options: [
@@ -230,7 +232,7 @@ def RemoveChildren()
 		{
 			try
 			{
-                log.debug "Removing ${it.deviceNetworkId} child device"
+				log.debug "Removing ${it.deviceNetworkId} child device"
 				deleteChildDevice(it.deviceNetworkId)
 			}
 			catch (e)
@@ -247,7 +249,7 @@ def RemoveChildren()
 
 def componentOn(child)
 {
-    log.debug "componentOn(${child.deviceNetworkId})"
+    if (logEnable) log.debug "componentOn(${child.deviceNetworkId})"
     if (child.deviceNetworkId.substring(child.deviceNetworkId.length()-3) == "ep2") {
         on2()
     }
@@ -258,7 +260,7 @@ def componentOn(child)
 
 def componentOff(child)
 {
-    log.debug "componentOff(${child.deviceNetworkId})"
+    if (logEnable) log.debug "componentOff(${child.deviceNetworkId})"
     if (child.deviceNetworkId.substring(child.deviceNetworkId.length()-3) == "ep2") {
         off2()
     }
@@ -269,13 +271,13 @@ def componentOff(child)
 
 def componentRefresh(child)
 {
-    log.debug "componentRefresh(${child.deviceNetworkId})"
+    if (logEnable) log.debug "componentRefresh(${child.deviceNetworkId})"
     refresh()
 }
 
 def updateChild(String ep, String status)
 {
-    log.debug "Updating child with endpoint ${ep} to ${status}"
+    if (logEnable) log.debug "Updating child with endpoint ${ep} to ${status}"
     if (ep == "both") {
         //Updating both endpoints so do 1 at a time and then exit
         updateChild("1", status)
@@ -308,7 +310,7 @@ def updateChild(String ep, String status)
 	}
 	catch (e)
 	{
-		log.debug "Failed to find child called " + childName + " - exception ${e}"
+		log.debug "Failed to find child " + childName + " - exception ${e}"
 	}
 
 	if (curdevice == null)
@@ -349,7 +351,7 @@ def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd)
 
 def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd)
 {
-    log.debug "hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport ${cmd}"
+    if (logEnable) log.debug "hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport ${cmd}"
     def result = []
     result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
     result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
@@ -358,7 +360,7 @@ def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd)
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport cmd) 
 {
-    log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport ${cmd}"
+    if (logEnable) log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityReport ${cmd}"
     if (cmd.endPoint == 2 ) {
         def currstate = device.currentValue("switch2")
         if (currstate == "on") {
@@ -381,7 +383,7 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCapabilityRepor
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityReport cmd) 
 {
-    log.debug "hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityReport ${cmd}"
+    if (logEnable) log.debug "hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityReport ${cmd}"
     if (cmd.endPoint == 2 ) {
         def currstate = device.currentState("switch2").getValue()
         if (currstate == "on") {
@@ -403,7 +405,7 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCapabilityRepor
 }
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
-    log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap ${cmd}"
+    if (logEnable) log.debug "hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap ${cmd}"
     def map = [ name: "switch$cmd.sourceEndPoint" ]
     def currstate = "off"
        if (cmd.destinationEndPoint == 2 ) {
@@ -428,7 +430,7 @@ def zwaveEvent(hubitat.zwave.commands.multichannelv3.MultiChannelCmdEncap cmd) {
 }
 
 def zwaveEvent(hubitat.zwave.commands.multichannelv4.MultiChannelCmdEncap cmd) {
-    log.debug "zwave.multichannelv4.MultiChannelCmdEncap ${cmd} - dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
+    if (logEnable) log.debug "zwave.multichannelv4.MultiChannelCmdEncap ${cmd} - dest:${cmd.destinationEndPoint} src:${cmd.sourceEndPoint} firstparam:${cmd.parameter.first()}"
     if (cmd.sourceEndPoint == 2 ) {
         if (cmd.parameter.first() > 180) {
             updateChild("2", "on")
@@ -470,16 +472,16 @@ def zwaveEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
 
 def refresh() {
 	def cmds = []
-    cmds << zwave.manufacturerSpecificV2.manufacturerSpecificGet().format()
+	cmds << zwave.manufacturerSpecificV2.manufacturerSpecificGet().format()
 	cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-    cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
+	cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
 	delayBetween(cmds, 500)
 }
 
 def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
 	def msr = String.format("%04X-%04X-%04X", cmd.manufacturerId, cmd.productTypeId, cmd.productId)
 	//log.debug "msr: $msr"
-    updateDataValue("MSR", msr)
+	updateDataValue("MSR", msr)
 }
 
 def poll() {
@@ -531,7 +533,7 @@ def configure() {
 
 def updateSingleparam(paramNum, paramValue, paramSize) {
 	//log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
-    secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
+	secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
 }
 
 /**
@@ -540,9 +542,9 @@ def updateSingleparam(paramNum, paramValue, paramSize) {
 def updated()
 {
 	log.debug "Preferences have been changed. Attempting configure()"
-	//configure()
-	def cmds = configure()
-	response(cmds)
+	configure()
+	//def cmds = configure()
+	//response(cmds)
 }
 
 def on() {
@@ -551,7 +553,7 @@ def on() {
         zwave.switchAllV1.switchAllOn().format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 def off() {
     log.debug "off"
@@ -559,7 +561,7 @@ def off() {
         zwave.switchAllV1.switchAllOff().format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 
 def on1() {
@@ -568,7 +570,7 @@ def on1() {
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:1, parameter:[255]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 
 def off1() {
@@ -578,7 +580,7 @@ def off1() {
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:1, parameter:[0]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 
 def on2() {
@@ -587,7 +589,7 @@ def on2() {
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:1, parameter:[255]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 
 def off2() {
@@ -596,23 +598,23 @@ def off2() {
     delayBetween([
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:1, parameter:[0]).format(),
         zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:2, destinationEndPoint:2, commandClass:37, command:2).format()
-    ], 300)
+    ], 250)
 }
 
 
 String secureCmd(cmd) {
-    if ((getDataValue("zwaveSecurePairingComplete") == "false") || (getDataValue("zwaveSecurePairingComplete") == null)){
-        //log.debug "insecure ${cmd}"
-        return cmd.format()
-    }
-    else if (getDataValue("zwaveSecurePairingComplete") == "true" && getDataValue("S2") == null) {
-        //log.debug "security-v1 ${cmd}"
+	if ((getDataValue("zwaveSecurePairingComplete") == "false") || (getDataValue("zwaveSecurePairingComplete") == null)){
+		if (logEnable) log.debug "insecure ${cmd}"
+		return cmd.format()
+	}
+	else if (getDataValue("zwaveSecurePairingComplete") == "true" && getDataValue("S2") == null) {
+		if (logEnable) log.debug "security-v1 ${cmd}"
 		return zwave.securityV1.securityMessageEncapsulation().encapsulate(cmd).format()
-    }
-    else {
-        //log.debug "secure ${cmd}"
+	}
+	else {
+		if (logEnable) log.debug "secure ${cmd}"
 		return secure(cmd)
-    }	
+	}	
 }
 
 String secure(String cmd){
