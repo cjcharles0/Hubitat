@@ -230,6 +230,7 @@ def ESPRestart()
 }
 
 def push(button)
+//This function allows you to create a button in a Hubitat dashboard which will trigger any function you want - use the function name as the button number
 {
     try {
         log.debug "Running function from button press: ${button}"
@@ -426,6 +427,7 @@ def parse(description)
 }
 
 def sendData(message) {
+	//Function that reacts to the child buttons being pressed and arms/disarms the alarm
     if (message.contains(" ")) {
         def parts = message.split(" ")
         // name will be the DNI and value will be the switch status
