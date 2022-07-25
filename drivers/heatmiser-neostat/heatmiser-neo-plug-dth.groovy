@@ -182,7 +182,17 @@ def processNeoResponse(response)
             }
         	cmds << sendEvent(name: "floortemp", value: flrtempstring, displayed: false)
         }
-
+	if (response.containsKey("TIMER")) {
+        	//Update switch state (which seems to be governed by "TIMER" state within heatmiser)
+            if (response.TIMER == false) {
+                switchTempString = "off"
+            }
+            else if (response.TIMER == true) {
+                switchTempString = "on"
+            }
+        	cmds << sendEvent(name: "switch", value: switchTempString, displayed: true)
+        }
+	    
         if (response.containsKey("STAT_MODE")) {
         	//This is used to identify what type of device it is
 			if (response.STAT_MODE.containsKey("TIMECLOCK")) {
