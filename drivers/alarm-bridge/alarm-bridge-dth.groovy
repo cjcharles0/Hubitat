@@ -547,7 +547,11 @@ private handleAlarmStatus(result)
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
-			sendEvent(name: "alarmStatus", value: "Alarm Going Off!!")
+			sendEvent(name: "alarmStatus", value: "Alarm")
+			if (settings.changehsm) {
+				log.debug "Updating HSM"
+				sendLocationEvent(name: "hsmAlert", value: "intrusion")
+			}
 			log.debug "Alarm Status found - Uh Oh!!"
 			break
 
