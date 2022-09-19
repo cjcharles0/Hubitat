@@ -9,8 +9,6 @@
 metadata {
 definition (name: "Fibaro Double Relay FGS-222", namespace: "cjcharles0", author: "Eric, Robin and Chris") {
 capability "Switch"
-capability "Relay Switch"
-//capability "Polling"
 capability "Configuration"
 capability "Refresh"
 capability "Zw Multichannel"
@@ -37,7 +35,7 @@ fingerprint deviceId: "0x1001", inClusters:"0x86, 0x72, 0x85, 0x60, 0x8E, 0x25, 
     
    preferences {
 
-	input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
+        input name: "logEnable", type: "bool", title: "Enable debug logging", defaultValue: true
 
         input name: "param1", type: "enum", defaultValue: "255", required: true,
             title: "Parameter No. 1 - Activate / deactivate functions ALL ON / ALL OFF. Default value: 255.",
@@ -232,7 +230,7 @@ def RemoveChildren()
 		{
 			try
 			{
-				log.debug "Removing ${it.deviceNetworkId} child device"
+                log.debug "Removing ${it.deviceNetworkId} child device"
 				deleteChildDevice(it.deviceNetworkId)
 			}
 			catch (e)
@@ -310,12 +308,12 @@ def updateChild(String ep, String status)
 	}
 	catch (e)
 	{
-		log.debug "Failed to find child " + childName + " - exception ${e}"
+		if (logEnable) log.debug "Failed to find child called " + childName + " - exception ${e}"
 	}
 
 	if (curdevice == null)
 	{
-		log.debug "Failed to find child called " + childName + " - exception ${e}"
+		if (logEnable) log.debug "Failed to find child called " + childName + " - exception ${e}"
 	}
 	else
 	{
@@ -330,7 +328,7 @@ def parse(String description)
     if (cmd)
     {
         result += zwaveEvent(cmd)
-        //log.debug "Parsed ${cmd} to ${result.inspect()}"
+        if (logEnable) log.debug "Parsed ${cmd} to ${result.inspect()}"
     }
     else
     {
@@ -342,19 +340,21 @@ def parse(String description)
 
 def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd)
 {
-    log.debug "hubitat.zwave.commands.basicv1.BasicSet ${cmd}"
+    //May need to make these v4 commands rather than V3 but seems to be working correctly for now....
+    if (logEnable) log.debug "hubitat.zwave.commands.basicv1.BasicSet ${cmd}"
     def result = []
-    result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-    result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
+    result << zwave.multiChannelV3.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
+    result << zwave.multiChannelV3.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
     response(delayBetween(result, 500)) // returns the result of reponse()
 }
 
 def zwaveEvent(hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport cmd)
 {
+    //May need to make these v4 commands rather than V3 but seems to be working correctly for now....
     if (logEnable) log.debug "hubitat.zwave.commands.switchbinaryv1.SwitchBinaryReport ${cmd}"
     def result = []
-    result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-    result << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
+    result << zwave.multiChannelV3.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
+    result << zwave.multiChannelV3.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
     response(delayBetween(result, 500)) // returns the result of reponse()
 }
 
@@ -472,16 +472,16 @@ def zwaveEvent(hubitat.zwave.commands.switchallv1.SwitchAllReport cmd) {
 
 def refresh() {
 	def cmds = []
-	cmds << zwave.manufacturerSpecificV2.manufacturerSpecificGet().format()
+    cmds << zwave.manufacturerSpecificV2.manufacturerSpecificGet().format()
 	cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:1, commandClass:37, command:2).format()
-	cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
+    cmds << zwave.multiChannelV4.multiChannelCmdEncap(sourceEndPoint:1, destinationEndPoint:2, commandClass:37, command:2).format()
 	delayBetween(cmds, 500)
 }
 
 def zwaveEvent(hubitat.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
 	def msr = String.format("%04X-%04X-%04X", cmd.manufacturerId, cmd.productTypeId, cmd.productId)
 	//log.debug "msr: $msr"
-	updateDataValue("MSR", msr)
+    updateDataValue("MSR", msr)
 }
 
 def poll() {
@@ -532,8 +532,8 @@ def configure() {
 }
 
 def updateSingleparam(paramNum, paramValue, paramSize) {
-	//log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
-	secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
+	if (logEnable) log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
+    secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
 }
 
 /**
@@ -542,9 +542,9 @@ def updateSingleparam(paramNum, paramValue, paramSize) {
 def updated()
 {
 	log.debug "Preferences have been changed. Attempting configure()"
-	configure()
-	//def cmds = configure()
-	//response(cmds)
+    configure()
+    //def cmds = configure()
+    //response(cmds)
 }
 
 def on() {
