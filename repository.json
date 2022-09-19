@@ -22,7 +22,7 @@
       "description": "Fibaro Dimmer 2 Module, with support for nightmode brightness"
     },
     {
-      "name": "Fibaro Double Smart FGS-222",
+      "name": "Fibaro Double Switch FGS-222",
       "tags": ["Lights & Switches"],
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/fibaro-fgs-222-package.json",
       "description": "Fibaro Double Relay Module"
