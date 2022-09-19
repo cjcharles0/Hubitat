@@ -1,13 +1,13 @@
 /**
  *  
- *	Fibaro FGS-222 Double Relay Switch Device Type - For use on Hubitat
+ *	Fibaro FGS-222 Double Relay Switch
  *  
- *	Author: Eric Maycock and Robin Winbourne, updated by Chris Charles
+ *	Author: Chris Charles
  *	Date: 2018-03-24
  */
  
 metadata {
-definition (name: "Fibaro Double Relay FGS-222", namespace: "cjcharles0", author: "Eric, Robin and Chris") {
+definition (name: "Fibaro Double Switch FGS-222", namespace: "cjcharles0", author: "Chris (help from Eric and Robin)") {
 capability "Switch"
 capability "Configuration"
 capability "Refresh"
@@ -308,12 +308,12 @@ def updateChild(String ep, String status)
 	}
 	catch (e)
 	{
-		if (logEnable) log.debug "Failed to find child called " + childName + " - exception ${e}"
+		log.debug "Failed to find child " + childName + " - exception ${e}"
 	}
 
 	if (curdevice == null)
 	{
-		if (logEnable) log.debug "Failed to find child called " + childName + " - exception ${e}"
+		log.debug "Failed to find child called " + childName + " - exception ${e}"
 	}
 	else
 	{
@@ -328,7 +328,7 @@ def parse(String description)
     if (cmd)
     {
         result += zwaveEvent(cmd)
-        if (logEnable) log.debug "Parsed ${cmd} to ${result.inspect()}"
+        //if (logEnable) log.debug "Parsed ${cmd} to ${result.inspect()}"
     }
     else
     {
@@ -515,24 +515,32 @@ def configure() {
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param42.toInteger(), parameterNumber:42, size: 1))
     cmds << secureCmd(zwave.configurationV1.configurationSet(scaledConfigurationValue: param43.toInteger(), parameterNumber:43, size: 1))
     
-    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
     if (paramAssociationGroup1) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:1, nodeId:[zwaveHubNodeId])) //0,1,2,3
     }
-    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 2, nodeId: []))
+    else {
+        cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 1, nodeId: []))
+    }
+
     if (paramAssociationGroup2) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:2, nodeId:[zwaveHubNodeId])) //0,1,2,3
     }
-    cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 3, nodeId: []))
+    else {
+        cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 2, nodeId: []))
+    }
+    
     if (paramAssociationGroup3) {
         cmds << secureCmd(zwave.associationV2.associationSet(groupingIdentifier:3, nodeId:[zwaveHubNodeId])) //0,1,2,3
+    }
+    else {
+        cmds << secureCmd(zwave.associationV2.associationRemove(groupingIdentifier: 3, nodeId: []))
     }
     
     return delayBetween(cmds, 500)
 }
 
 def updateSingleparam(paramNum, paramValue, paramSize) {
-	if (logEnable) log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
+    log.debug "Updating single Parameter (paramNum: $paramNum, paramValue: $paramValue)"
     secureCmd(zwave.configurationV1.configurationSet(parameterNumber: paramNum, scaledConfigurationValue: paramValue, size: paramSize))
 }
 
