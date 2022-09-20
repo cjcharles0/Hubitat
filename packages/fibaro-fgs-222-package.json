@@ -5,7 +5,7 @@
   "dateReleased": "2020-12-01",
   "version": "1.01",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgs-222",
-  "communityLink": "",
+  "communityLink": "https://community.hubitat.com/t/fibaro-fgs-224/59108",
   "drivers": [
     {
       "id": "7cbba7a0-25a8-46d5-9209-8f48ec8add24",
