@@ -1,7 +1,5 @@
 /**
- *  Note: This handler requires the "Metering Switch Child Device" to be installed.
- *
- *  Copyright 2016 Eric Maycock
+ *  Copyright 2016 Eric Maycock and modified by cjcharles0
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -16,8 +14,6 @@
  *
  *  Author: Eric Maycock (erocm123)
  *  
- *  04/25/2017 - Fix for combined energy & power reports & switch endpoints showing correct info.
- *  04/18/2017 - This handler requires the Metering Switch Child device to create the multiple switch endpoints.
  */
  
 metadata {
@@ -36,9 +32,9 @@ definition (name: "Fibaro Double Switch 2 FGS-223", namespace: "erocm123", autho
 
     command "reset"
     command "childOn"
-        command "childOff"
-        command "childRefresh"
-	command "childReset"
+    command "childOff"
+    command "childRefresh"
+    command "childReset"
 
 
     fingerprint mfr: "010F", prod: "0203", model: "2000", deviceJoinName: "Fibaro Double Switch 2"
@@ -690,7 +686,7 @@ private void createChildDevices() {
 
 private sendAlert() {
    sendEvent(
-      descriptionText: "Child device creation failed. Please make sure that the \"Metering Switch Child Device\" is installed and published.",
+      descriptionText: "Child device creation failed.",
 	  eventType: "ALERT",
 	  name: "childDeviceCreation",
 	  value: "failed",
