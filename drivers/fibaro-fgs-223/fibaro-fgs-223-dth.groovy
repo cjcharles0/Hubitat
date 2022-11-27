@@ -407,22 +407,22 @@ def off() {
     ])
 }
 
-def childOn(String dni) {
-    logging("childOn($dni)")
+def componentOn(String dni) {
+    logging("componentOn($dni)")
     def cmds = []
     cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0xFF), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
-def childOff(String dni) {
-    logging("childOff($dni)")
+def componentOff(String dni) {
+    logging("componentOff($dni)")
 	def cmds = []
     cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0x00), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
-def childRefresh(String dni) {
-    logging("childRefresh($dni)")
+def componentRefresh(String dni) {
+    logging("componentRefresh($dni)")
 	def cmds = []
     cmds << new hubitat.device.HubAction(command(encap(zwave.switchBinaryV1.switchBinaryGet(), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
     cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 0), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
@@ -679,7 +679,7 @@ private void createChildDevices() {
 	state.oldLabel = device.label
      try {
         for (i in 1..2) {
-	       addChildDevice("Metering Switch Child Device", "${device.deviceNetworkId}-ep${i}",
+		addChildDevice("hubitat", "Generic Component Switch", "${device.deviceNetworkId}-ep${i}",
 		      [completedSetup: true, label: "${device.displayName} (S${i})",
 		      isComponent: false, componentName: "ep$i", componentLabel: "Switch $i"])
         }
