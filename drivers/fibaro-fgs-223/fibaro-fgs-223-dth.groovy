@@ -17,7 +17,7 @@
  */
  
 metadata {
-definition (name: "Fibaro Double Switch 2 FGS-223", namespace: "erocm123", author: "Eric Maycock") {
+definition (name: "Fibaro Double Switch FGS-223 Cjcharles0", namespace: "erocm123", author: "Eric Maycock") {
     capability "Sensor"
     capability "Actuator"
     capability "Switch"
@@ -31,10 +31,10 @@ definition (name: "Fibaro Double Switch 2 FGS-223", namespace: "erocm123", autho
     capability "HoldableButton"
 
     command "reset"
-    command "childOn"
-    command "childOff"
-    command "childRefresh"
-    command "childReset"
+    command "componentOn"
+    command "componentOff"
+    command "componentRefresh"
+    command "componentReset"
 
 
     fingerprint mfr: "010F", prod: "0203", model: "2000", deviceJoinName: "Fibaro Double Switch 2"
