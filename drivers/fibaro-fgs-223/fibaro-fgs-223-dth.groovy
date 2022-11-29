@@ -403,35 +403,35 @@ def off() {
     ])
 }
 
-def componentOn(String dni) {
-    logging("componentOn($dni)")
+def componentOn(child) {
+    logging("componentOn(${child.deviceNetworkId})")
     def cmds = []
-    cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0xFF), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0xFF), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
-def componentOff(String dni) {
-    logging("componentOff($dni)")
+def componentOff(child) {
+    logging("componentOff(${child.deviceNetworkId})")
 	def cmds = []
-    cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0x00), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.basicV1.basicSet(value: 0x00), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
-def componentRefresh(String dni) {
-    logging("componentRefresh($dni)")
+def componentRefresh(child) {
+    logging("componentRefresh(${child.deviceNetworkId})")
 	def cmds = []
-    cmds << new hubitat.device.HubAction(command(encap(zwave.switchBinaryV1.switchBinaryGet(), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
-    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 0), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
-    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 2), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.switchBinaryV1.switchBinaryGet(), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 0), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 2), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
-def childReset(String dni) {
-    logging("childReset($dni)")
+def childReset(child) {
+    logging("childReset(${child.deviceNetworkId})")
 	def cmds = []
-    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterReset(), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
-    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 0), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
-    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 2), channelNumber(dni))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterReset(), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 0), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
+    cmds << new hubitat.device.HubAction(command(encap(zwave.meterV2.meterGet(scale: 2), channelNumber(child.deviceNetworkId))), hubitat.device.Protocol.ZWAVE)
 	cmds
 }
 
