@@ -28,6 +28,12 @@
       "description": "Fibaro Double Relay Module"
     },
     {
+      "name": "Fibaro Double Switch FGS-223",
+      "tags": ["Lights & Switches"],
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/fibaro-fgs-223-package.json",
+      "description": "Fibaro Double Switch 2 Module"
+    },
+    {
       "name": "Fibaro Double Smart FGS-224",
       "tags": ["Lights & Switches"],
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/packages/fibaro-fgs-224-package.json",
