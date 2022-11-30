@@ -286,6 +286,22 @@ def parse(String description)
 }
 
 
+def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cmd) {
+    logging("CentralSceneNotification: $cmd")
+    logging("sceneNumber: $cmd.sceneNumber")
+    logging("sequenceNumber: $cmd.sequenceNumber")
+    logging("keyAttributes: $cmd.keyAttributes")
+    
+    buttonEvent(cmd.keyAttributes + 1, (cmd.sceneNumber == 1? "pushed" : "held"))
+
+}
+
+def buttonEvent(button, value) {
+    logging("buttonEvent() Button:$button, Value:$value")
+	sendEvent(name: value, value: button, isStateChange:true)
+}
+
+
 def zwaveEvent(hubitat.zwave.commands.basicv1.BasicSet cmd)
 {
     if (logEnable) log.debug "hubitat.zwave.commands.basicv1.BasicSet ${cmd}"
