@@ -1,0 +1,18 @@
+{
+  "packageName": "Fibaro Double Switch 2 FGS-223",
+  "author": "cjcharles0",
+  "minimumHEVersion": "1.1",
+  "dateReleased": "2022-11-30",
+  "version": "1.04",
+  "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/fibaro-fgs-223",
+  "communityLink": "https://community.hubitat.com/t/release-fibaro-fgs-224-fgs-223-and-fgs-222/59108",
+  "drivers": [
+    {
+      "id": "7cbba7a0-25a8-46d5-9209-8f52ec8a7b77",
+      "name": "Fibaro Double Switch 2 FGS-223",
+      "namespace": "cjcharles0",
+      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/fibaro-fgs-223/fibaro-fgs-223-dth.groovy",
+      "required": true
+    }
+  ]
+}
