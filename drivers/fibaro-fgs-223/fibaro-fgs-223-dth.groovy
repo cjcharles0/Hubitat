@@ -10,14 +10,14 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
- *  Fibaro FGS-223 Dual Relay
+ *  Fibaro FGS-223 Double Switch 2
  *
  *  Author: Eric Maycock (erocm123)
  *  
  */
  
 metadata {
-definition (name: "Fibaro Double Switch FGS-223 Cjcharles0", namespace: "erocm123", author: "Eric Maycock") {
+definition (name: "Fibaro Double Switch 2 FGS-223", namespace: "cjcharles0", author: "Eric Maycock and updated by Chris Charles") {
     capability "Sensor"
     capability "Actuator"
     capability "Switch"
