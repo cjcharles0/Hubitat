@@ -13,6 +13,11 @@ capability "Configuration"
 capability "Refresh"
 capability "Zw Multichannel"
 
+capability "PushableButton"
+capability "HoldableButton"
+capability "ReleasableButton"
+capability "DoubleTapableButton"
+
 attribute "switch1", "string"
 attribute "switch2", "string"
 
