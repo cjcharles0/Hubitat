@@ -291,9 +291,14 @@ def zwaveEvent(hubitat.zwave.commands.centralscenev1.CentralSceneNotification cm
 	log.debug "sceneNumber: ${cmd.sceneNumber}"
 	log.debug "sequenceNumber: ${cmd.sequenceNumber}"
 	log.debug "keyAttributes: ${cmd.keyAttributes}"
-    
 	buttonEvent(cmd.keyAttributes + 1, (cmd.sceneNumber == 1? "pushed" : "held"))
-
+}
+def zwaveEvent(hubitat.zwave.commands.centralscenev3.CentralSceneNotification cmd) {
+	log.debug "CentralSceneNotification: ${cmd}"
+	log.debug "sceneNumber: ${cmd.sceneNumber}"
+	log.debug "sequenceNumber: ${cmd.sequenceNumber}"
+	log.debug "keyAttributes: ${cmd.keyAttributes}"
+	buttonEvent(cmd.keyAttributes + 1, (cmd.sceneNumber == 1? "pushed" : "held"))
 }
 
 def buttonEvent(button, value) {
