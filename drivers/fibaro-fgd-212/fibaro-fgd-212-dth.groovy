@@ -263,7 +263,7 @@ def dimmerEvents(hubitat.zwave.Command cmd, source = null) {
     // Restore pending level if dimmer has been switched on after nightmode has been disabled:
     try {
         if (!state.nightmodeActive & (state.nightmodePendingLevel > 0) & switchEvent.isStateChange & switchValue == "on") {
-            logger("dimmerEvent(): Applying Pending Level: ${state.nightmodePendingLevel}","debug")
+            logging("dimmerEvent(): Applying Pending Level: ${state.nightmodePendingLevel}","debug")
             result << response(secure(zwave.basicV1.basicSet(value: Math.round(state.nightmodePendingLevel.toInteger() * 99 / 100 ))))
             state.nightmodePendingLevel = 0
         }
