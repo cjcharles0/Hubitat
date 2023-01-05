@@ -1,9 +1,10 @@
 {
   "packageName": "Alarm Bridge",
   "author": "cjcharles0",
-  "minimumHEVersion": "1.1",
-  "dateReleased": "2020-11-15",
-  "version": "1.05",
+  "minimumHEVersion": "2.2.1",
+  "version": "1.5",
+	"dateReleased": "2023-01-05",
+	"releaseNotes": "v1.5   Breaking change to use component children devices rather than virtual ones, including the alarm trigger\n       Please see forum notes for upgrade steps (it takes a few minutes but does require an action).",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/alarm-bridge",
   "communityLink": "https://community.hubitat.com/t/release-visonic-interlogix-networx-elk-alarm-bridge/55040",
   "drivers": [
@@ -12,13 +13,6 @@
       "name": "Alarm Bridge",
       "namespace": "cjcharles0",
       "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm-bridge/alarm-bridge-dth.groovy",
-      "required": true
-    },
-    {
-      "id": "72e54e66-77d7-4e04-8459-e87e2388f574",
-      "name": "Alarm Bridge Child Switch",
-      "namespace": "cjcharles0",
-      "location": "https://raw.githubusercontent.com/cjcharles0/Hubitat/master/drivers/alarm-bridge/alarm-child-switch.groovy",
       "required": true
     }
   ]
