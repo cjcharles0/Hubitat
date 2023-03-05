@@ -27,7 +27,7 @@ metadata
 		capability "Configuration"
         capability "Alarm"
         capability "Actuator"
-        capability "Security keypad"
+        capability "Security Keypad"
 		
 		attribute "alarmStatus", "string"
 		attribute "alarmEvents", "string"
