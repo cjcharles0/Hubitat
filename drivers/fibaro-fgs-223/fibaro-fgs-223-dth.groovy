@@ -35,6 +35,12 @@ definition (name: "Fibaro Double Switch 2 FGS-223", namespace: "cjcharles0", aut
     command "componentOff"
     command "componentRefresh"
     command "componentReset"
+    command "on"
+    command "off"
+    command "on1"
+    command "off1"
+    command "on2"
+    command "off2"
 
 
     fingerprint mfr: "010F", prod: "0203", model: "2000", deviceJoinName: "Fibaro Double Switch 2"
@@ -402,6 +408,27 @@ def off() {
         encap(zwave.basicV1.basicSet(value: 0x00), 2)
     ])
 }
+def on1() { 
+   commands([
+        encap(zwave.basicV1.basicSet(value: 0xFF), 1)
+    ])
+}
+def off1() {
+   commands([
+        encap(zwave.basicV1.basicSet(value: 0x00), 1)
+    ])
+}
+def on2() { 
+   commands([
+        encap(zwave.basicV1.basicSet(value: 0xFF), 2)
+    ])
+}
+def off2() {
+   commands([
+        encap(zwave.basicV1.basicSet(value: 0x00), 2)
+    ])
+}
+
 
 def componentOn(child) {
     logging("componentOn(${child.deviceNetworkId})")
