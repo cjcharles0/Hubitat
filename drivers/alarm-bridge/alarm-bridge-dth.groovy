@@ -826,7 +826,7 @@ private handleCreateZones(result)
         def switches = ["disarm", "armhome", "armaway"] //, "panic", "armhome_bypass", "armaway_bypass"]
         switches.each {
             try {
-                def child = addChildDevice("cjcharles0", "Alarm Bridge Child Switch", "alarm${it.value}", [name: "Alarm ${it.value.toString().capitalize()}"])
+                def child = addChildDevice("hubitat", "Generic Component Switch", "alarm${it.value}", [name: "Alarm ${it.value.toString().capitalize()}"])
                 child.off()
             }
             catch (e)
