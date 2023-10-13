@@ -525,7 +525,7 @@ private handleAlarmStatus(result)
 			log.debug "Not-ready status found"
 			break
 
-		case ["Armed Away", "Arm Away"]:
+		case ["Armed Away", "Arm Away", "Quick Arm Away"]:
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "active", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
@@ -537,7 +537,7 @@ private handleAlarmStatus(result)
 			log.debug "Armed Away status found"
 			break
 
-		case ["Armed Home", "Arm Home"]:
+		case ["Armed Home", "Arm Home", "Quick Arm Home"]:
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "active", displayed: false)
