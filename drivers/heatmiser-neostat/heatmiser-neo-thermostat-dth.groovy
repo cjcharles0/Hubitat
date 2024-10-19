@@ -619,33 +619,33 @@ private minsToHoursMins(intMins) {
 
 //Dont use any of these yet as I havent worked out why they would be needed! 
 //Just log that they were triggered for troubleshooting
-private heat() {
+def heat() {
 	log.debug "heat()"
 }
-private emergencyHeat() {
+def emergencyHeat() {
 	log.debug "emergencyHeat()"
 }
 def setThermostatMode(chosenmode) {
 	log.debug "setThermostatMode() - ${chosenmode}"
 }
-private fanOn() {
+def fanOn() {
 	log.debug "fanOn()"
 }
-private fanAuto() {
+def fanAuto() {
 	log.debug "fanAuto()"
 }
-private fanCirculate() {
+def fanCirculate() {
 	log.debug "fanCirculate()"
 }
 def setThermostatFanMode(chosenmode) {
 	log.debug "setThermostatFanMode() - ${chosenmode}"
 }
-private cool() {
+def cool() {
 	log.debug "cool()"
 }
-private setCoolingSetpoint(number) {
+def setCoolingSetpoint(number) {
 	log.debug "setCoolingSetpoint() - ${number}"
 }
-private auto() {
+def auto() {
 	log.debug "auto()"
 }
