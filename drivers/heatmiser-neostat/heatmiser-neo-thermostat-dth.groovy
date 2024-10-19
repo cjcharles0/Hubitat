@@ -53,7 +53,6 @@ metadata {
         command "off" //Required by ST for thermostat type
         command "on" //Required by ST for switch type
         
-        command "ensureAlexaCapableMode"
         command "setpointUp" // Custom
 		command "setpointDown" // Custom
 		command "durationUp" // Custom
@@ -112,10 +111,11 @@ metadata {
                 attributeState("cooling", backgroundColor:"#00A0DC")
             }
             tileAttribute("device.thermostatMode", key: "THERMOSTAT_MODE") {
-                attributeState("auto", label:' ')
                 attributeState("heat", label:' ', defaultState: true)
                 attributeState("off", label:' ')
-                attributeState("cool", label:' ')
+            }
+            tileAttribute("device.thermostatFanMode", key: "THERMOSTAT_FAN_MODE") {
+                attributeState("off", label:' ', defaultState: true)
             }
             tileAttribute("device.heatingSetpoint", key: "HEATING_SETPOINT") {
                 attributeState("heatingSetpoint", label:'${currentValue}', unit:"dC", defaultState: true)
@@ -234,12 +234,16 @@ def updated()
     
     cmds << sendEvent(name: "holdtime", value: "0:00")
     
+    cmds << sendEvent(name: "supportedThermostatFanModes", value: JsonOutput.toJson(["off"]), isStateChange: true)
+    cmds << sendEvent(name: "supportedThermostatModes", value:  JsonOutput.toJson(["off", "heat"]), isStateChange: true)
+
     
     cmds << sendEvent(name: "temperature", value: "5")
     cmds << sendEvent(name: "thermostatSetpoint", value: "5")
     cmds << sendEvent(name: "coolingSetpoint", value: "5")
     cmds << sendEvent(name: "heatingSetpoint", value: "5")
     
+    cmds << sendEvent(name: "thermostatFanMode", value: "off")
     cmds << sendEvent(name: "thermostatMode", value: "heat")
     
     return cmds
@@ -615,33 +619,33 @@ private minsToHoursMins(intMins) {
 
 //Dont use any of these yet as I havent worked out why they would be needed! 
 //Just log that they were triggered for troubleshooting
-def heat() {
+private heat() {
 	log.debug "heat()"
 }
-def emergencyHeat() {
+private emergencyHeat() {
 	log.debug "emergencyHeat()"
 }
 def setThermostatMode(chosenmode) {
 	log.debug "setThermostatMode() - ${chosenmode}"
 }
-def fanOn() {
+private fanOn() {
 	log.debug "fanOn()"
 }
-def fanAuto() {
+private fanAuto() {
 	log.debug "fanAuto()"
 }
-def fanCirculate() {
+private fanCirculate() {
 	log.debug "fanCirculate()"
 }
 def setThermostatFanMode(chosenmode) {
 	log.debug "setThermostatFanMode() - ${chosenmode}"
 }
-def cool() {
+private cool() {
 	log.debug "cool()"
 }
-def setCoolingSetpoint(number) {
+private setCoolingSetpoint(number) {
 	log.debug "setCoolingSetpoint() - ${number}"
 }
-def auto() {
+private auto() {
 	log.debug "auto()"
 }
