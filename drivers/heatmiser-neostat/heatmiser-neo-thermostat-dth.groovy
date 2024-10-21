@@ -205,6 +205,7 @@ def refresh()
 	log.debug "Refreshing thermostat data from parent"
 	refreshinfo()
     runEvery5Minutes("refreshinfo")
+    updated()
 }
 private refreshinfo()
 {
@@ -234,8 +235,8 @@ def updated()
     
     cmds << sendEvent(name: "holdtime", value: "0:00")
     
-    cmds << sendEvent(name: "supportedThermostatFanModes", value: JsonOutput.toJson(["off"]), isStateChange: true)
-    cmds << sendEvent(name: "supportedThermostatModes", value:  JsonOutput.toJson(["off", "heat"]), isStateChange: true)
+    cmds << sendEvent(name: "supportedThermostatFanModes", value: groovy.json.JsonOutput.toJson(["off"]), isStateChange: true)
+    cmds << sendEvent(name: "supportedThermostatModes", value: groovy.json.JsonOutput.toJson(["off", "heat"]), isStateChange: true)
 
     
     cmds << sendEvent(name: "temperature", value: "5")
