@@ -205,7 +205,6 @@ def refresh()
 	log.debug "Refreshing thermostat data from parent"
 	refreshinfo()
     runEvery5Minutes("refreshinfo")
-    updated()
 }
 private refreshinfo()
 {
