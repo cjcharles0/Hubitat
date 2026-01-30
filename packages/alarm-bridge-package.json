@@ -2,9 +2,9 @@
   "packageName": "Alarm Bridge",
   "author": "cjcharles0",
   "minimumHEVersion": "2.2.1",
-  "version": "1.5",
-	"dateReleased": "2023-01-05",
-	"releaseNotes": "v1.5   Breaking change to use component children devices rather than virtual ones, including the alarm trigger\n       Please see forum notes for upgrade steps (it takes a few minutes but does require an action).",
+  "version": "1.6",
+	"dateReleased": "2026-01-05",
+	"releaseNotes": "v1.6  Improve bypass and child zone handling  \n  (V1.5 was breaking - Use component children devices rather than virtual ones, including the alarm trigger\n       Please see forum notes for upgrade steps (it takes a few minutes but does require an action).)",
   "documentationLink": "https://github.com/cjcharles0/Hubitat/drivers/alarm-bridge",
   "communityLink": "https://community.hubitat.com/t/release-visonic-interlogix-networx-elk-alarm-bridge/55040",
   "drivers": [
