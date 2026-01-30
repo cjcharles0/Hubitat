@@ -13,8 +13,8 @@
  *  Alarm Bridge Controller for Hubitat
  *
  *  Author: Chris Charles (cjcharles0)
- *  Date: 2020-10-18
- *  Version: 1.5
+ *  Date: 2024-01-12
+ *  Version: 1.6
  */
 
 import groovy.json.JsonSlurper
@@ -70,6 +70,7 @@ metadata
 		input name: "alarmtriggermethod", type: "enum", title: "Method to trigger alarm", options: ["Serial", "IO"], description: "Default IO if unsure", required: true, displayDuringSetup: true
 		input name: "inactivityseconds", type: "string", title:"Motion sensor inactivity timeout", description: "override the default of 20s (60s max)", required: false, displayDuringSetup: false
 		input name: "password", type: "password", title:"Password", required:false, displayDuringSetup:false
+		input name: "bypassedzones", type: "string", title:"Zones to bypass (up to zone 30)", description: "Stored as an IP address - 1.0.0.0 = zone 1, 5.0.0.0 = zone 1&3 and 8.2.0.0 = zones 4&10", required:false, displayDuringSetup:false
 	}
 
 	tiles (scale: 2)
@@ -193,7 +194,30 @@ def AlarmArmHome()
 	sendEvent(name: "armhome", value: "changing")
 	sendEvent(name: "disarm", value: "inactive", displayed: false)
 	sendEvent(name: "alarmStatus", value: "Arming Home", displayed: false)
+	// if (settings.changehsm) {sendLocationEvent(name: "hsmSetArm", value: "disarm") }
 	getAction("/armhome")
+}
+
+def AlarmArmAwayInstant()
+{
+	// Send an arm away instant command to the alarm and log that it is changing
+	if (settings.debuglogs) log.debug "armawayinstant()"
+	sendEvent(name: "armaway", value: "changing")
+	sendEvent(name: "armhome", value: "inactive", displayed: false)
+	sendEvent(name: "disarm", value: "inactive", displayed: false)
+	sendEvent(name: "alarmStatus", value: "Arming Away Instant", displayed: false)
+	getAction("/armawayinstant")
+}
+
+def AlarmArmHomeInstant()
+{
+	// Send an arm home instant command to the alarm and log that it is changing
+	if (settings.debuglogs) log.debug "armhomeinstant()"
+	sendEvent(name: "armaway", value: "inactive", displayed: false)
+	sendEvent(name: "armhome", value: "changing")
+	sendEvent(name: "disarm", value: "inactive", displayed: false)
+	sendEvent(name: "alarmStatus", value: "Arming Home Instant", displayed: false)
+	getAction("/armhomeinstant")
 }
 
 def AlarmDisarm()
@@ -224,6 +248,21 @@ def AlarmTrigger()
 		}
 		getAction("/alarm${outputinfo}")
 	}
+}
+
+def AlarmEnableBypass()
+{
+	// Enable bypass for zones stored in settings
+	if (settings.debuglogs) log.debug "EnableBypass()"
+	getAction("/enablebypass?zones=${bypassedzones}")
+}
+
+def AlarmDisableBypass()
+{
+	// Disable bypass for zones stored in settings
+    // This should be automatic after previous disarm command
+	if (settings.debuglogs) log.debug "DisableBypass()"
+	getAction("/disablebypass?zones=${bypassedzones}")
 }
 
 def ESPRestart()
@@ -525,7 +564,7 @@ private handleAlarmStatus(result)
 			log.debug "Not-ready status found"
 			break
 
-		case ["Armed Away", "Arm Away", "Quick Arm Away"]:
+		case ["Armed Away", "Arm Away"]:
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "active", displayed: false)
 			sendEvent(name: "armhome", value: "inactive", displayed: false)
@@ -537,7 +576,7 @@ private handleAlarmStatus(result)
 			log.debug "Armed Away status found"
 			break
 
-		case ["Armed Home", "Arm Home", "Quick Arm Home"]:
+		case ["Armed Home", "Arm Home"]:
 			sendEvent(name: "disarm", value: "inactive", displayed: false)
 			sendEvent(name: "armaway", value: "inactive", displayed: false)
 			sendEvent(name: "armhome", value: "active", displayed: false)
@@ -570,7 +609,7 @@ private handleAlarmStatus(result)
 			break
 
 		default:
-			log.debug "Unknown Alarm state received = ${result.stat_str}"
+			log.debug "Unknown/Ignored Alarm state received = ${result.stat_str}"
 			break
 	}
 }
@@ -586,12 +625,12 @@ private handleZoneStatus(result)
 	}
 	catch (e)
 	{
-		log.debug "Failed to find child zone for zone " + result.zone_id + "exception ${e}"
+		log.debug "Failed to find child device for zone " + result.zone_id + "exception ${e}"
 	}
 
 	if (curdevice == null)
 	{
-		log.debug "Failed to find child device for zone: " + result.zone_id + " expecting " + thisZoneDeviceId
+		log.debug "Not updating zone: " + result.zone_id + ", missing " + thisZoneDeviceId
 	}
 	else
 	{
@@ -607,9 +646,13 @@ private handleZoneStatus(result)
 		{
 			case ["Violated (Motion)", "Active"]:
 				log.debug "Active zone: " + result.zone_id + ", which is called - " + curdevice
+            	//Should only send the correct event, but in case Visonic and Hubitat definition is different we will send all event types
 				if (isMotionDevice)
 				{
-					curdevice?.sendEvent(name: "motion", value: "active") // Correct message
+                    if (curdevice?.currentValue("motion") != "active") {
+                        //Add this extra check to avoid refreshing child devices when no state change has actually happened
+						curdevice?.sendEvent(name: "motion", value: "active") // Correct message
+                    }
 				}
 				else if (isContactDevice)
 				{
@@ -625,7 +668,10 @@ private handleZoneStatus(result)
 				log.debug "Inactive zone: " + result.zone_id + ", which is called - " + curdevice
 				if (isMotionDevice)
 				{
-					curdevice?.sendEvent(name: "motion", value: "inactive") // Correct message
+					if (curdevice?.currentValue("motion") != "inactive") {
+                    	//Add this extra check to avoid refreshing child devices when no state change has actually happened
+                        curdevice?.sendEvent(name: "motion", value: "inactive") // Correct message
+                    }
 				}
 				else if (isContactDevice)
 				{
@@ -645,7 +691,10 @@ private handleZoneStatus(result)
 				}
 				else if (isContactDevice)
 				{
-					curdevice?.sendEvent(name: "contact", value: "open") // Correct message
+                    if (curdevice?.currentValue("contact") != "open") {
+                    	//Add this extra check to avoid refreshing child devices when no state change has actually happened
+                        curdevice?.sendEvent(name: "contact", value: "open") // Correct message
+                    }
 				}
 				else if (isSmokeDevice)
 				{
@@ -661,7 +710,10 @@ private handleZoneStatus(result)
 				}
 				else if (isContactDevice)
 				{
-					curdevice?.sendEvent(name: "contact", value: "closed") // Correct message
+					if (curdevice?.currentValue("contact") != "closed") {
+                    	//Add this extra check to avoid refreshing child devices when no state change has actually happened
+                        curdevice?.sendEvent(name: "contact", value: "closed") // Correct message
+                    }
 				}
 				else if (isSmokeDevice)
 				{
