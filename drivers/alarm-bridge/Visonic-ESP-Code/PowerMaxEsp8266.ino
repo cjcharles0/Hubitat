@@ -1,0 +1,2705 @@
+#include <pmax.h>
+#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiUdp.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
+#include <WiFiManager.h>
+#include <ESP8266SSDP.h>
+#include <ESP8266mDNS.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
+
+#include <NTPClient.h>
+#include <TimeLib.h>
+
+//////////////////// IMPORTANT DEFINES, ADJUST TO YOUR NEEDS //////////////////////
+//////////////////// COMMENT DEFINE OUT to disable a feature  /////////////////////
+//Telnet allows to see debug logs via network, it allso allows CONTROL of the system if PM_ALLOW_CONTROL is defined
+#define PM_ENABLE_TELNET_ACCESS
+
+//This enables control over your system, when commented out, alarm is 'read only' (esp will read the state, but will never arm/disarm)
+#define PM_ALLOW_CONTROL
+
+//This enables flashing of ESP via Webpage (WiFI)
+#define PM_ENABLE_WEB_UPDATES
+
+//This enables flashing of ESP via OTA (WiFI)
+//#define PM_ENABLE_OTA_UPDATES
+
+//This enables ESP to send a multicast UDP packet on LAN with notifications
+//Any device on your LAN can register to listen for those messages, and will get a status of the alarm
+//#define PM_ENABLE_LAN_BROADCAST
+
+//Those settings control where to send lan broadcast, clients need to use the same value. Note IP specified here has nothing to do with ESP IP, it's only a destination for multicast
+//Read more about milticast here: http://en.wikipedia.org/wiki/IP_multicast
+IPAddress PM_LAN_BROADCAST_IP(192, 168, 32, 12);
+#define   PM_LAN_BROADCAST_PORT  23127
+
+
+#define FLASH_EEPROM_SIZE 4096
+extern "C" {
+#include "spi_flash.h"
+}
+extern "C" uint32_t _SPIFFS_start;
+extern "C" uint32_t _SPIFFS_end;
+extern "C" uint32_t _SPIFFS_page;
+extern "C" uint32_t _SPIFFS_block;
+#define DEFAULT_HAIP                   "0.0.0.0"
+#define DEFAULT_HAPORT                 39501
+#define DEFAULT_USE_PASS               false
+#define DEFAULT_UI_PASS                ""
+#define DEFAULT_USE_STATIC             false
+#define DEFAULT_IP                     "0.0.0.0"
+#define DEFAULT_GATEWAY                "0.0.0.0"
+#define DEFAULT_SUBNET                 "255.255.255.0"
+#define DEFAULT_USE_MQTT               false
+#define DEFAULT_MQTT_USER              ""
+#define DEFAULT_MQTT_PASS              ""
+#define DEFAULT_AP_WHEN_NO_WIFI        true
+#define DEFAULT_RESET_COUNTER          0
+#define RESET_LIMIT                    5
+#define DEFAULT_POWERMAX_PIN           "3622"
+#define DEFAULT_LISTEN_NOT_ENROL       false
+#define DEFAULT_SLOW_COMMS             false
+#define DEFAULT_WIFI_POWER             205
+#define DEFAULT_INACTIVITY_SECONDS     20
+#define DEFAULT_NTP_SERVER             "pool.ntp.org"
+#define DEFAULT_BYPASS_ZONES           "0.0.0.0"
+
+struct SettingsStruct
+{
+    byte          haIP[4];
+    unsigned int  haPort;
+    boolean       usePassword;
+    char          UIPassword[26];
+    boolean       useStatic;
+    byte          IP[4];
+    byte          Gateway[4];
+    byte          Subnet[4];
+    bool          useMQTT;
+    char          MQTTUser[26];
+    char          MQTTPass[26];
+    boolean       APWhenNoWiFi;
+    byte          resetCounter;
+    byte          settingsVersion;
+    char          PowermaxPIN[5];
+    boolean       ListenNotEnrol;
+    boolean       SlowComms;
+    byte          WiFiPower;
+    int           inactivity_seconds;
+    char          NTPServer[26];
+    byte          bypasszones[4];
+} Settings;
+
+
+//Useful defines
+#define Firmware_Date __DATE__
+#define Firmware_Time __TIME__
+#define JsonHeaderText "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nConnection: close\r\n\r\n"
+#define HTMLHeaderText "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nConnection: close\r\n\r\n"
+
+//These define the pins used for triggering alarms (or something else!) and the timer to turn them off
+int activatedPinA = -1;
+int activatedPinB = -1;
+unsigned long userPinResetTime = 0;
+
+//Global variables for storing the problem text (low battery etc)
+#define SIZE_OF_PROBLEM_TEXT 201
+char alarmProblemText[SIZE_OF_PROBLEM_TEXT + 1];
+
+//Global variables for the event log
+#define SIZE_OF_EVENT_LOG 40
+byte eventStatusLog[SIZE_OF_EVENT_LOG] = {0};
+unsigned long eventStatusLogTime[SIZE_OF_EVENT_LOG] = {0};
+
+//Global variables for managing zones
+int zones_enrolled_count = MAX_ZONE_COUNT;
+int max_zone_id_enrolled = MAX_ZONE_COUNT;
+
+#define ALARM_STATE_CHANGE 0
+#define ZONE_STATE_CHANGE 1
+
+#define SEND_TO_SMARTHOME 0
+#define SEND_TO_REQUESTER 1
+
+#define GET_LENGTH 0
+#define SEND_MESSAGE 1
+
+#define CREATE_ZONES 0
+#define REFRESH_ZONES 1
+
+#define CONTACT_ZONE 1
+#define MOTION_ZONE 2
+
+//Lets set up MQTT in case it is used/needed
+WiFiClient wifiClient;
+PubSubClient mqtt(wifiClient);
+bool mqtt_setup = false;            //This defines whether we have stored all the details for mqtt connection
+long mqtt_last_reconnect = 0;      //This is the number of times we have failed so we dont keep on trying unless you try saving settings again
+
+bool send_telnet_debug = false;     //This is used to forward all alarm messages via telnet
+
+//These functions will load our Settings struct into memory or read it back
+void SaveSettings(void)
+{
+    SaveToFlash(0, (byte*)&Settings, sizeof(struct SettingsStruct));
+}
+void LoadSettings()
+{
+    LoadFromFlash(0, (byte*)&Settings, sizeof(struct SettingsStruct));
+}
+void SaveToFlash(int index, byte* memAddress, int datasize)
+{
+    if (index > 33791) // Limit usable flash area to 32+1k size
+    {
+        return;
+    }
+    uint32_t _sector = ((uint32_t)&_SPIFFS_start - 0x40200000) / SPI_FLASH_SEC_SIZE;
+    uint8_t* data = new uint8_t[FLASH_EEPROM_SIZE];
+    int sectorOffset = index / SPI_FLASH_SEC_SIZE;
+    int sectorIndex = index % SPI_FLASH_SEC_SIZE;
+    uint8_t* dataIndex = data + sectorIndex;
+    _sector += sectorOffset;
+
+    // load entire sector from flash into memory
+    noInterrupts();
+    spi_flash_read(_sector * SPI_FLASH_SEC_SIZE, reinterpret_cast<uint32_t*>(data), FLASH_EEPROM_SIZE);
+    interrupts();
+
+    // store struct into this block
+    memcpy(dataIndex, memAddress, datasize);
+
+    noInterrupts();
+    // write sector back to flash
+    if (spi_flash_erase_sector(_sector) == SPI_FLASH_RESULT_OK)
+        if (spi_flash_write(_sector * SPI_FLASH_SEC_SIZE, reinterpret_cast<uint32_t*>(data), FLASH_EEPROM_SIZE) == SPI_FLASH_RESULT_OK)
+        {
+            //Serial.println("flash save ok");
+        }
+    interrupts();
+    delete [] data;
+    //String log = F("FLASH: Settings saved");
+    //addLog(LOG_LEVEL_INFO, log);
+}
+void LoadFromFlash(int index, byte* memAddress, int datasize)
+{
+    uint32_t _sector = ((uint32_t)&_SPIFFS_start - 0x40200000) / SPI_FLASH_SEC_SIZE;
+    uint8_t* data = new uint8_t[FLASH_EEPROM_SIZE];
+    int sectorOffset = index / SPI_FLASH_SEC_SIZE;
+    int sectorIndex = index % SPI_FLASH_SEC_SIZE;
+    uint8_t* dataIndex = data + sectorIndex;
+    _sector += sectorOffset;
+
+    // load entire sector from flash into memory
+    noInterrupts();
+    spi_flash_read(_sector * SPI_FLASH_SEC_SIZE, reinterpret_cast<uint32_t*>(data), FLASH_EEPROM_SIZE);
+    interrupts();
+
+    // load struct from this block
+    memcpy(memAddress, dataIndex, datasize);
+    delete [] data;
+}
+void EraseFlash()
+{
+    uint32_t _sectorStart = (ESP.getSketchSize() / SPI_FLASH_SEC_SIZE) + 1;
+    uint32_t _sectorEnd = _sectorStart + (ESP.getFlashChipRealSize() / SPI_FLASH_SEC_SIZE);
+
+    for (uint32_t _sector = _sectorStart; _sector < _sectorEnd; _sector++)
+    {
+        noInterrupts();
+        if (spi_flash_erase_sector(_sector) == SPI_FLASH_RESULT_OK)
+        {
+            interrupts();
+            Serial.print(F("FLASH: Erase Sector: "));
+            Serial.println(_sector);
+            delay(10);
+        }
+        interrupts();
+    }
+}
+boolean str2ip(char *string, byte* IP)
+{
+    byte c;
+    byte part = 0;
+    int value = 0;
+
+    for (int x = 0; x <= strlen(string); x++)
+    {
+        c = string[x];
+        if (isdigit(c))
+        {
+            value *= 10;
+            value += c - '0';
+        }
+
+        else if (c == '.' || c == 0) // next octet from IP address
+        {
+            if (value <= 255) {
+                IP[part] = value;
+                part++;
+            }
+            else {
+                return false;
+            }
+            value = 0;
+        }
+        else if (c == ' ') // ignore these
+            ;
+        else // invalid token
+            return false;
+    }
+    if (part == 4) // correct number of octets
+        return true;
+    return false;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////
+//NOTE: PowerMaxAlarm class should contain ONLY functionality of Powerlink
+//If you want to (for example) send an SMS on arm/disarm event, don't add it to PowerMaxAlarm
+//Instead create a new class that inherits from PowerMaxAlarm, and override required function
+class MyPowerMax : public PowerMaxAlarm
+{
+    public:
+        bool zone_motion[MAX_ZONE_COUNT + 1] = {0};
+        byte zone_in_use[MAX_ZONE_COUNT + 1] = {0};
+        
+        //long Powerlink_PIN_Code = 0x3622;
+
+        virtual void OnStatusChange(const PlinkBuffer  * Buff)
+        {
+            //call base class implementation first, this will send ACK back and upate internal state.
+            PowerMaxAlarm::OnStatusChange(Buff);
+            
+            //Now send update to ST and use zone 0 as system state not zone
+            SendJSONMessage(GetStrPmaxLogEvents(Buff->buffer[4]), GetStrPmaxEventSource(Buff->buffer[3]), 0, ALARM_STATE_CHANGE);
+            //now our customization:
+            switch (Buff->buffer[4])
+            {
+                case 0x51: //"Arm Home"
+                case 0x53: //"Quick Arm Home"
+                    //OnSytemArmed(Buff->buffer[4], GetStrPmaxLogEvents(Buff->buffer[4]), Buff->buffer[3], GetStrPmaxEventSource(Buff->buffer[3]));
+                    break;
+
+                case 0x52: //"Arm Away"
+                case 0x54: //"Quick Arm Away"
+                    //OnSytemArmed(Buff->buffer[4], GetStrPmaxLogEvents(Buff->buffer[4]), Buff->buffer[3], GetStrPmaxEventSource(Buff->buffer[3]));
+                    break;
+
+                case 0x55: //"Disarm"
+                    //OnSytemDisarmed(Buff->buffer[3], GetStrPmaxEventSource(Buff->buffer[3]));
+                    break;
+                    
+                default:
+                    break;
+            }
+            
+            //Log the status change to event log
+            logStatusChange(Buff->buffer[4]);
+        }
+
+        virtual void OnStatusUpdatePanel(const PlinkBuffer  * Buff)
+        {
+            //call base class implementation first, to log the event and update states.
+            PowerMaxAlarm::OnStatusUpdatePanel(Buff);
+
+            //Now if it is a zone event then send it to SmartThings
+            if (this->isZoneEvent()) {
+                const unsigned char zoneId = Buff->buffer[5];
+                ZoneEvent eventType = (ZoneEvent)Buff->buffer[6];
+                char currentzonename[50] = {0};
+                strncpy(currentzonename, this->getZoneName(zoneId), 49);
+
+                if (strcmp(currentzonename, "Unknown") == 0) {
+                    //Its an unknown zone, but must be in use, so lets update to be a generic useful name
+                    strncpy(currentzonename, "Zone ", 49);
+                    char tempstring[5];
+                    itoa(zoneId, tempstring, 10);
+                    strcat(currentzonename, tempstring);
+                }
+
+                SendJSONMessage(currentzonename, GetStrPmaxZoneEventTypes(Buff->buffer[6]), zoneId, ZONE_STATE_CHANGE);
+
+                //We keep a separate log of zones in use since that helps for alarm panels which do not support Powerlink properly
+                zone_in_use[zoneId] = (byte)eventType;
+
+                //If it is a Violated (motion) event then set zone activated
+                if (eventType == ZE_Violated) {
+                    zone_motion[zoneId] = true;
+                }
+            }
+            else {
+                //We could do something with non-zone events here
+                //Log the status change to event log
+                byte statusid = this->stat;
+                if (statusid == 0 || statusid == 4 || statusid == 5) {
+                    //Do nothing as already covered by log event
+                }
+                else {
+                    logStatusChange(statusid + 200);
+                }
+            }
+        }
+
+        const char* getZoneSensorType(unsigned char zoneId)
+        {
+            if (zoneId < MAX_ZONE_COUNT &&
+                    zone[zoneId].enrolled)
+            {
+                return zone[zoneId].sensorType;
+            }
+            return "Unknown";
+        }
+
+        const char* getZoneSensorStatus(unsigned char zoneId)
+        {
+            if (zoneId < MAX_ZONE_COUNT &&
+                    zone[zoneId].enrolled)
+            {
+                return GetStrPmaxZoneEventTypes(zone[zoneId].lastEvent);
+            }
+            return "Unknown";
+        }
+
+        void UpdateZonesEnrolledCount() {
+            int counter = 0;
+            for (int ix = 1; ix < MAX_ZONE_COUNT; ix++) {
+                zone_motion[ix] = false;
+                if ((zone[ix].enrolled) || (zone_in_use[ix] > 0)) {
+                    counter++;
+                    max_zone_id_enrolled = ix;
+                }
+            }
+            zones_enrolled_count = counter;
+        }
+
+        bool HasZoneBeenEnrolled(int zone_num) {
+            if (zone[zone_num].enrolled) {
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+
+        int HasZoneBeenHeardFrom(int zone_num) {
+            if (zone_in_use[zone_num] > 0) {
+                if ((zone_in_use[zone_num] == ZE_Open) || (zone_in_use[zone_num] == ZE_Closed)) {
+                    return CONTACT_ZONE;
+                }
+                else {
+                    return MOTION_ZONE;
+                }
+            }
+            else {
+                return 0;
+            }
+        }
+
+        void generateProblemText() {
+            //We have been asked to update the problem text so lets update the global char array
+            char zonenumstring[4];
+            alarmProblemText[0] = '\0';
+            for (int ix = 1; ix <= max_zone_id_enrolled; ix++) {
+                if (zone[ix].enrolled) {
+                    if ((zone[ix].stat.lowBattery == true) || (zone[ix].stat.lowBattery == true)) {
+                        //Here the zone is enrolled and has a problem so first check if we need a comma
+                        if (strlen(alarmProblemText) > 0) {
+                            strncat(alarmProblemText, ", ", _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+                        }
+                        //Now add zone name and problem type
+                        strncat(alarmProblemText, this->getZoneName(ix), _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+                        strncat(alarmProblemText, " (Z", _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+                        itoa(ix, zonenumstring, 10);
+                        strncat(alarmProblemText, zonenumstring, _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+                        strncat(alarmProblemText, ") low batt", _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+                    }
+                }
+            }
+            if (strlen(alarmProblemText) == 0) {
+                strncat(alarmProblemText, "No problems detected", _max(0, SIZE_OF_PROBLEM_TEXT - strlen(alarmProblemText)));
+            }
+        }
+
+        void CheckInactivityTimers() {
+            for (int ix = 1; ix <= max_zone_id_enrolled; ix++) {
+                if (zone_motion[ix]) {
+                    if ((os_getCurrentTimeSec() - zone[ix].lastEventTime) > Settings.inactivity_seconds) {
+                        char currentzonename[50];
+                        strncpy(currentzonename, this->getZoneName(ix), 49);
+                        if (strcmp(currentzonename, "Unknown") == 0) {
+                            //Its an unknown zone, but must be in use, so lets update to be a generic useful name
+                            strncpy(currentzonename, "Zone ", 49);
+                            char tempstring[5];
+                            itoa(ix, tempstring, 10);
+                            strcat(currentzonename, tempstring);
+                        }
+                        //We've got all the zone name information now, so lets put it back to inactive and send a JSON message about this
+                        SendJSONMessage(currentzonename, "No Motion", ix, ZONE_STATE_CHANGE);
+                        zone_motion[ix] = false;
+                        zone[ix].lastEvent = ZE_NotActive;
+                        zone[ix].lastEventTime = os_getCurrentTimeSec();
+                    }
+                }
+            }
+        }
+
+        void updatePMaxVariables() {
+            //First update the PIN which is the most important part
+            long longPIN;
+            longPIN = strtol(Settings.PowermaxPIN, NULL, 16);
+            if ((longPIN >= 0) && (longPIN <= 65535)) {
+                //We now have a valid PIN so lets update the PMax Library
+                Powerlink_PIN_Code = longPIN;
+            }
+            else {
+                strncpy(Settings.PowermaxPIN, DEFAULT_POWERMAX_PIN, sizeof(Settings.PowermaxPIN));
+                SaveSettings();
+                Powerlink_PIN_Code = 0x3622;
+            }
+            //Now update slow comms and listen/enrol flags to help with some panels
+            Powerlink_ListenNotEnrol = Settings.ListenNotEnrol;
+            Powerlink_SlowComms = Settings.SlowComms;
+        }
+
+        bool sendCommandCC(int commandvalue) {
+
+            unsigned char buff[] = {0xA1, 0x00, 0x00, 0x07, 0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43}; addPin(buff, 4, true);
+            char str[1];
+            sprintf(str, "%#X", commandvalue);
+            buff[3] = commandvalue;
+
+            unsigned short i;
+            char printBuffer[MAX_BUFFER_SIZE * 3 + 3];
+            char *bufptr;      /* Current char in buffer */
+            bufptr = printBuffer;
+            for (i = 0; i < (sizeof(buff)); i++) {
+                sprintf(bufptr, "%02X ", buff[i]);
+                bufptr = bufptr + 3;
+            }
+
+            DEBUG(LOG_DEBUG, "BufferSize: %d" , sizeof(buff));
+            DEBUG(LOG_DEBUG, "Buffer: %s", printBuffer);
+            return sendBuffer(buff, sizeof(buff));
+        }
+
+};
+//////////////////////////////////////////////////////////////////////////////////
+
+MyPowerMax pm;
+ESP8266WebServer server(80);
+ESP8266HTTPUpdateServer httpUpdater;
+
+//Use UDP for NTP client, so define it here
+WiFiUDP udp;
+NTPClient timeClient(udp);
+
+//Now continue with other (more important) things!
+int telnetDbgLevel = LOG_NO_FILTER; //by default only NO FILTER messages are logged to telnet clients
+
+#ifdef PM_ENABLE_LAN_BROADCAST
+unsigned int packetCnt = 0;
+#endif
+
+#ifdef PM_ENABLE_TELNET_ACCESS
+WiFiServer telnetServer(23); //telnet server
+WiFiClient telnetClient;
+#endif
+
+#define PRINTF_BUF 512 // define the tmp buffer size (change if desired)
+void LOG(const char *format, ...)
+{
+    char buf[PRINTF_BUF];
+    va_list ap;
+
+    va_start(ap, format);
+    vsnprintf(buf, sizeof(buf), format, ap);
+#ifdef PM_ENABLE_TELNET_ACCESS
+    if (telnetClient.connected())
+    {
+        telnetClient.write((const uint8_t *)buf, strlen(buf));
+    }
+#endif
+    va_end(ap);
+}
+
+void logStatusChange(byte statusByte) {
+    for (int i = SIZE_OF_EVENT_LOG-1; i >= 1; i--) {
+        //Need to shift everything by 1 due to 0 based byte array (1st element at 0th position)
+        eventStatusLog[i] = eventStatusLog[i-1];
+    }
+    for (int i = SIZE_OF_EVENT_LOG-1; i >= 1; i--) {
+        //Need to shift everything by 1 due to 0 based byte array (1st element at 0th position)
+        eventStatusLogTime[i] = eventStatusLogTime[i-1];
+    }
+    eventStatusLog[0] = statusByte;
+    eventStatusLogTime[0] = timeClient.getEpochTime();
+}
+
+void SendJSONMessage(const char* ZoneOrEvent, const char* WhoOrState, const unsigned char zoneID, int zone_or_system_update) {
+
+    //Convert zone ID to text
+    char zoneIDtext[10];
+    char tempstring[26];
+    itoa(zoneID, zoneIDtext, 10);
+
+    DEBUG(LOG_NOTICE, "Creating JSON string");
+
+    if (Settings.useMQTT == false) {
+        char header_text[200];
+        char message_text[500];
+        header_text[0] = '\0';
+        message_text[0] = '\0';
+
+        //We have no MQTT details so lets send to HTTP and build JSON message
+        if (zone_or_system_update == ALARM_STATE_CHANGE) {
+            //Here we have an alarm status change (zone 0) so put the status into JSON
+            strcat_P(message_text, PSTR("{\"update_type\":\"system_status\",\r\n\"stat_str\": \""));
+            strcat(message_text, ZoneOrEvent);
+            strcat_P(message_text, PSTR("\",\r\n\"stat_update_from\": \""));
+            strcat(message_text, WhoOrState);
+            //For panel messages let's also add on if there are problems
+            strcat_P(message_text, PSTR("\",\r\n\"problem_report\": \""));
+            pm.generateProblemText();
+            strcat(message_text, alarmProblemText);
+            strcat(message_text, "\"");
+        }
+        else if (zone_or_system_update == ZONE_STATE_CHANGE) {
+            //Here we have a zone status change so put this information into JSON
+            strcat_P(message_text, PSTR("{\"update_type\":\"zone_status\",\r\n\"zone_id\": \""));
+            strcat(message_text, zoneIDtext);
+            strcat_P(message_text, PSTR("\",\r\n\"zone_name\": \""));
+            strcat(message_text, ZoneOrEvent);
+            strcat_P(message_text, PSTR("\",\r\n\"zone_status\": \""));
+            strcat(message_text, WhoOrState);
+            strcat(message_text, "\"");
+        }
+
+        //Close the JSON string
+        strcat(message_text, "}\r\n");
+
+        //Now we can build the header text including the length
+        strcat(header_text, "POST / HTTP/1.1\r\nHost: ");
+        sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+        strcat(header_text, tempstring);
+        strcat(header_text, ":");
+        itoa(Settings.haPort, tempstring, 10);
+        strcat(header_text, tempstring);
+        strcat_P(header_text, PSTR("\r\nContent-Type: application/json;charset=utf-8\r\nContent-Length: "));
+        itoa(strlen(message_text), tempstring, 10);
+        strcat(header_text, tempstring);
+        strcat_P(header_text, PSTR("\r\nServer: Visonic Alarm\r\nConnection: close\r\n\r\n"));
+
+        //No MQTT details means we should use http for sending the data rather than MQTT
+        WiFiClient client;
+        char tempstring[26];
+        sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+        if (!client.connect(tempstring, Settings.haPort)) {
+            //Serial.println("connection failed");
+            return;
+        }
+        //Send the JSON to web port
+        client.print(header_text);
+        client.print(message_text);
+        client.flush();
+    }
+    else {
+        //Here we should be using MQTT so lets check everything is correct first
+        if (mqtt_setup) {
+            //Here we have MQTT setup correctly so let's send after checking connection
+            if (!mqtt.connected()) {
+              mqttreconnect();
+            }
+            mqtt.loop(); //Just belt and braces to ensure there is nothing pending on the connection
+
+            char topic[25];
+            topic[0] = '\0';
+            if (zone_or_system_update == ALARM_STATE_CHANGE) {
+                strcat(topic, "alarm/panel");
+            }
+            else {
+                strcat(topic, "alarm/zone");
+                strcat(topic, zoneIDtext);
+            }
+
+            //Now publish the message with retain flag (the 'true' parameter)
+            if (zone_or_system_update == ALARM_STATE_CHANGE) {
+                char state[25];
+                strcpy(state, ZoneOrEvent);
+                if ((strcmp(state, "Disarm") == 0) || (strcmp(state, "Disarmed") == 0) || (strcmp(state, "Cancel Alarm") == 0)) {
+                    strcpy(state, "disarmed");
+                }
+                if (strcmp(state, "Arm Home") == 0 || strcmp(state, "Quick Arm Home") == 0) {
+                    strcpy(state, "armed_home");
+                }
+                if (strcmp(state, "Arm Away") == 0 || strcmp(state, "Quick Arm Away") == 0) {
+                    strcpy(state, "armed_away");
+                }
+                if (strcmp(state, "Interior Alarm") == 0 || strcmp(state, "Perimeter Alarm") == 0 || strcmp(state, "Delay Alarm") == 0 ||
+                        strcmp(state, "24h Silent Alarm") == 0 || strcmp(state, "24h Audible Alarm") == 0 || strcmp(state, "Tamper Alarm") == 0 ||
+                        strcmp(state, "Panic From Keyfob") == 0 || strcmp(state, "Panic From Control Panel") == 0 || strcmp(state, "Duress") == 0 || strcmp(state, "Confirm Alarm") == 0) {
+                    strcpy(state, "triggered");
+                }
+                mqtt.publish(topic, state, true);
+
+                //Also we will publish the alarm problem text here (smal delay to allow publishing)
+                delay(100);
+                strcpy(topic, "alarm/problem_report");
+                pm.generateProblemText();
+                mqtt.publish(topic, alarmProblemText, true);
+            }
+            else if (zone_or_system_update == ZONE_STATE_CHANGE) {
+                mqtt.publish(topic, WhoOrState, true);
+            }
+        }
+    }
+}
+
+void mqttcallback(char* topic, byte* payload, unsigned int length) {
+    //Got a message printed by another device, so check whether it is an arm/disarm command
+    if (strcmp(topic, "alarm/set") == 0) {
+        //if (topic == "alarm/set") {
+        char message[51];
+        int maxlength = 50;
+        if (length < 50) {
+            maxlength = length;
+        }
+        for (int i = 0; i < maxlength; i++) {
+            message[i] = (char)payload[i];
+            message[i + 1] = '\0';
+        }
+
+        if ((strcmp(message, "ARM_AWAY") == 0) || (strcmp(message, "armaway") == 0)) {
+            handleArmAway();
+            mqtt.publish("alarm/panel", "pending", false);
+        }
+        else if ((strcmp(message, "ARM_HOME") == 0) || (strcmp(message, "armhome") == 0)) {
+            handleArmHome();
+            mqtt.publish("alarm/panel", "pending", false);
+        }
+        else if ((strcmp(message, "DISARM") == 0) || (strcmp(message, "disarm") == 0)) {
+            handleDisarm();
+        }
+        else if ((strcmp(message, "ARM_AWAY_INSTANT") == 0) || (strcmp(message, "armawayinstant") == 0)) {
+            handleArmAwayInstant();
+            mqtt.publish("alarm/panel", "pending", false);
+        }
+        else if ((strcmp(message, "ARM_HOME_INSTANT") == 0) || (strcmp(message, "armhomeinstant") == 0)) {
+            handleArmHomeInstant();
+            mqtt.publish("alarm/panel", "pending", false);
+        }
+        else if ((strcmp(message, "ALARM") == 0) || (strcmp(message, "alarm") == 0)) {
+            triggerIOAlarm();
+        }
+    }
+}
+
+
+boolean mqttreconnect() {
+  if (mqtt.connect("ESP_Powermax_Client", Settings.MQTTUser, Settings.MQTTPass, "alarm/panel",0,1,"alarm disconnected")) {
+    // Once connected, publish a connection message and resubscribe
+    mqtt.setCallback(mqttcallback);
+    mqtt.publish("alarm/panel", "alarm connected", true);
+    mqtt.subscribe("alarm/set");
+  }
+  return mqtt.connected();
+}
+
+void handleRoot() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This returns the 'homepage' with links to each other main page
+    unsigned long days = 0, hours = 0, minutes = 0;
+    unsigned long val = os_getCurrentTimeSec();
+
+    days = val / (3600 * 24);
+    val -= days * (3600 * 24);
+
+    hours = val / 3600;
+    val -= hours * 3600;
+
+    minutes = val / 60;
+    val -= minutes * 60;
+
+    byte mac[6];
+    WiFi.macAddress(mac);
+
+    char timetemp[20];
+    timeClient.getFormattedTime().toCharArray(timetemp,19);
+    
+    char szTmp[PRINTF_BUF * 2 + 500];
+    sprintf_P(szTmp, PSTR("<html>"
+            "<b>Dashboard for esp8266 controlled Visonic Powermax.</b><br><br>"
+            "MAC Address: %02X%02X%02X%02X%02X%02X<br>"
+            "Uptime: %02d:%02d:%02d.%02d<br>"
+            "Time: %s<br>"
+            "Free heap: %u<br><br>"
+            "Web Commands<br>"
+            "<a href='/disarm' target='_blank'>Disarm</a><br>" //target blank gives a new tab
+            "<a href='/armaway' target='_blank'>Arm Away</a><br>"
+            "<a href='/armhome' target='_blank'>Arm Home</a><br>"
+            "<a href='/armawayinstant' target='_blank'>Instant Arm Away</a><br>"
+            "<a href='/armhomeinstant' target='_blank'>Instant Arm Home</a><br>"
+            "<a href='/alarm' target='_blank'>Sound the Alarm Options</a><br>"
+            "<a href='/enablebypass'>Enable Bypass ?zones=4BYTES</a><br>"
+            "<a href='/disablebypass'>Disable Bypass ?zones=4BYTES</a><br><br>"
+            "JSON Endpoints<br>"
+            "<a href='/status'>Alarm Status</a><br>"
+            "<a href='/settings'>Get Saved IP/port Details</a><br>"
+            "<a href='/getzonenames'>Show Zone Names</a><br>"
+            "<a href='/refresh'>Refresh Zone Status</a><br><br>"
+            "Setup SmartHome Platform (create/removezones)<br>"
+            "<a href='/setupsmarthome'>Configure Child Devices</a><br><br>"
+            "Configuration<br>"
+            "<a href='/advanced'>Configure Settings</a><br>"
+            "<a href='/eventhistory'>Show event history</a><br>"
+            "<a href='/reboot'>Reboot device (power cycle >> soft reset)</a><br>"
+            "<a href='/config'>?X=Y - inactivity_seconds, ip_for_st, port_for_st, mqtt_username, mqtt_password</a><br>"
+            "<a href='/update'>Update Firmware</a>"
+            "</html>"),
+            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+            (int)days, (int)hours, (int)minutes, (int)val, timetemp,
+            ESP.getFreeHeap());
+    server.send(200, "text/html", szTmp);
+}
+
+//writes to webpage without storing large buffers, only small buffer is used to improve performance
+class WebOutput : public IOutput
+{
+        WiFiClient* c;
+        char buffer[PRINTF_BUF + 1];
+        int bufferLen;
+
+    public:
+        WebOutput(WiFiClient* a_c)
+        {
+            c = a_c;
+            bufferLen = 0;
+            memset(buffer, 0, sizeof(buffer));
+        }
+
+        void write(const char* str)
+        {
+            int len = strlen(str);
+            if (len < (PRINTF_BUF / 2))
+            {
+                if (bufferLen + len < PRINTF_BUF)
+                {
+                    strcat(buffer, str);
+                    bufferLen += len;
+                    return;
+                }
+            }
+
+            flush();
+            c->write(str, len);
+
+            yield();
+        }
+
+        void flush()
+        {
+            if (bufferLen)
+            {
+                c->write((const uint8_t *)buffer, bufferLen);
+                buffer[0] = 0;
+                bufferLen = 0;
+            }
+        }
+};
+
+void handleStatus() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This sends full system status including status/panel PIN codes/zones/... etc
+
+    //First update zone count to reduce checking on unused zones (not actually needed in this function but called often so a good place to put it)
+    pm.UpdateZonesEnrolledCount();
+
+    //Now collect all status information and send it to the user
+    WiFiClient client = server.client();
+
+    client.print(JsonHeaderText);
+
+    if (Settings.ListenNotEnrol) {
+        client.print(F("{\"update_type\":\"system_status\",\r\n\"stat_str\":\""));
+        client.print(pm.GetStrPmaxSystemStatus(pm.GetSystemStatus()));
+        client.print(F("\",\r\n\"listen_only_mode\":\"enabled\"}\r\n"));
+    }
+    else {
+        WebOutput out(&client);
+        pm.dumpToJson(&out);
+        out.flush();
+    }
+
+    client.stop();
+}
+
+void handleRefresh() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This returns the current arm state in case it gets out of sync somehow
+    sendZoneNames(SEND_TO_REQUESTER, REFRESH_ZONES);
+
+}
+
+void handleSettings() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This returns the current arm state in case it gets out of sync somehow
+    char tempstring[26];
+    WiFiClient client = server.client();
+
+    client.print(JsonHeaderText);
+    client.print("{\"ip_for_st\":\"");
+    sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+    client.print(tempstring);
+    client.print("\",\r\n\"port_for_st\":");
+    itoa(Settings.haPort, tempstring, 10);
+    client.print(tempstring);
+    client.print(",\r\n\"inactivity_seconds\":");
+    client.print((Settings.inactivity_seconds));
+    client.print(",\r\n\"mqtt_username\":\"");
+    client.print((Settings.MQTTUser));
+    client.print("\",\r\n\"mqtt_password\":\"");
+    client.print((Settings.MQTTPass));
+
+    client.print("\",\r\n\"powermax_pin\":\"");
+    client.print((Settings.PowermaxPIN));
+
+    client.print("\",\r\n\"firmware_date\":\"");
+    client.print(Firmware_Date);
+    client.print(" - ");
+    client.print(Firmware_Time);
+
+    client.print("\"}\r\n");
+    client.stop();
+}
+
+void handleGetZoneNames() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    sendZoneNames(SEND_TO_REQUESTER, CREATE_ZONES);
+}
+
+void sendZoneNames(int SendToWho, int Create_Or_Refresh) {
+
+    //First update zone count to reduce checking on unused zones
+    pm.UpdateZonesEnrolledCount();
+
+    //Now setup the send-to connection and create the JSON
+    WiFiClient client;
+    if (SendToWho == SEND_TO_REQUESTER) {
+        //Send to server/requester, and send header first
+        client = server.client();
+        client.print(JsonHeaderText);
+    }
+    else {
+        //Send information to a new client that is actually the SmartHome platform
+        char tempstring[26];
+        sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+        if (!client.connect(tempstring, Settings.haPort)) {
+            //Serial.println("connection failed");
+            return;
+        }
+        char header_text[200];
+        header_text[0] = '\0';
+        strcat(header_text, "POST / HTTP/1.1\r\nHost: ");
+        sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+        strcat(header_text, tempstring);
+        strcat(header_text, ":");
+        itoa(Settings.haPort, tempstring, 10);
+        strcat(header_text, tempstring);
+        strcat_P(header_text, PSTR("\r\nContent-Type: application/json;charset=utf-8\r\nServer: Visonic Alarm\r\nContent-Length: "));
+        itoa(GetZoneNames(GET_LENGTH, Create_Or_Refresh, client), tempstring, 10);
+        strcat(header_text, tempstring);
+        strcat_P(header_text, PSTR("\r\nConnection: close\r\n\r\n"));
+        client.print(header_text);
+    }
+
+    //We've finally worked out header length and sent it, so we can work out the message and send that before closing connection
+    GetZoneNames(SEND_MESSAGE, Create_Or_Refresh, client);
+    client.stop();
+}
+
+int GetZoneNames(int Send_Or_Length, int Create_Or_Refresh, WiFiClient &client) {
+    //Assemble or send the actual message
+    int length_of_message = 0;
+    int sizeofoutputstring = 250;
+    int number_of_zones = 0;
+    char outputstring[sizeofoutputstring + 1]; //Used to store the output for each zone to speed output
+    char currentzonename[50]; //Max zone name of 50 bytes hence copy in one less to ensure an ending
+    char currentzonetype[50]; //Zone type also 50 char maximum
+    char numberasstring[5];
+    bool export_this_zone; // Should we export the current zone into JSON string
+
+    if (Create_Or_Refresh == CREATE_ZONES) {
+        strncpy_P(outputstring, PSTR("{\"update_type\":\"create_zones\",\r\n\"namedzonesenrolled\":"), sizeofoutputstring);
+        itoa(zones_enrolled_count, numberasstring, 10);
+        strncat(outputstring, numberasstring, _max(0, sizeofoutputstring - strlen(outputstring))); //.c_str()
+        strncat_P(outputstring, PSTR(",\r\n\"maxzoneid\":"), _max(0, sizeofoutputstring - strlen(outputstring)));
+        itoa(max_zone_id_enrolled, numberasstring, 10);
+        strncat(outputstring, numberasstring, _max(0, sizeofoutputstring - strlen(outputstring)));
+    }
+    else {
+        strncpy_P(outputstring, PSTR("{\"update_type\":\"refresh\",\r\n\"stat_str\":\""), sizeofoutputstring);
+        strncat(outputstring, pm.GetStrPmaxSystemStatus(pm.GetSystemStatus()), _max(0, sizeofoutputstring - strlen(outputstring)));
+        strncat_P(outputstring, PSTR("\",\r\n\"problem_report\":\""), _max(0, sizeofoutputstring - strlen(outputstring)));
+        pm.generateProblemText();
+        strncat(outputstring, alarmProblemText, _max(0, sizeofoutputstring - strlen(outputstring)));
+        strncat(outputstring, "\"", _max(0, sizeofoutputstring - strlen(outputstring)));
+    }
+    
+
+    strncat_P(outputstring, PSTR(",\r\n\"zones\":[\r\n"), _max(0, sizeofoutputstring - strlen(outputstring)));
+
+    if (Send_Or_Length == GET_LENGTH) {
+        length_of_message = length_of_message + strlen(outputstring);
+    }
+    else {
+        client.print(outputstring);
+    }
+
+    for (int ix = 1; ix <= max_zone_id_enrolled; ix++) {
+        //First convert the zone ID to a char array
+        itoa(ix, numberasstring, 10);
+
+        //Then bring zone name and type into a local char array
+        if (pm.HasZoneBeenEnrolled(ix)) {
+            strncpy(currentzonename, pm.getZoneName(ix), 49);
+            strncpy(currentzonetype, pm.getZoneSensorType(ix), 49);
+            export_this_zone = true;
+        }
+        else if (pm.HasZoneBeenHeardFrom(ix) > 0) {
+            //Here we have heard from a zone but it has failed to enrol, so create some zone info using simple format
+            strncpy(currentzonename, "Zone ", 49);
+            strcat(currentzonename, numberasstring);
+            if (pm.HasZoneBeenHeardFrom(ix) == CONTACT_ZONE) {
+                strncpy(currentzonetype, "Magnet", 49);
+            }
+            else {
+                strncpy(currentzonetype, "Motion", 49);
+            }
+            export_this_zone = true;
+        }
+        else {
+            export_this_zone = false;
+        }
+
+        if (export_this_zone) {
+            //Its a zone with a name and type, so create an output text that we can send back to the client, start by 'emptying' the char array
+
+            outputstring[0] = '\0';
+            //Add a comma if we have already got one entry
+            if (number_of_zones > 0) {
+                strncat(outputstring, ",", _max(0, sizeofoutputstring - strlen(outputstring)));
+            }
+            //Now fill the remaining information about zone id/name/type
+            strncat(outputstring, "{\"zone_id\":", _max(0, sizeofoutputstring - strlen(outputstring)));
+            strncat(outputstring, numberasstring, _max(0, sizeofoutputstring - strlen(outputstring))); //.c_str()
+            strncat(outputstring, ",\r\n\"zone_name\":\"", _max(0, sizeofoutputstring - strlen(outputstring)));
+            strncat(outputstring, currentzonename, _max(0, sizeofoutputstring - strlen(outputstring)));
+
+            if (Create_Or_Refresh == CREATE_ZONES) {
+                strncat(outputstring, "\",\r\n\"zone_type\":\"", _max(0, sizeofoutputstring - strlen(outputstring)));
+                strncat(outputstring, currentzonetype, _max(0, sizeofoutputstring - strlen(outputstring)));
+            }
+            else {
+                strncat(outputstring, "\",\r\n\"zone_status\":\"", _max(0, sizeofoutputstring - strlen(outputstring)));
+                strncat(outputstring, pm.getZoneSensorStatus(ix), _max(0, sizeofoutputstring - strlen(outputstring)));
+            }
+            strncat(outputstring, "\"}\r\n", _max(0, sizeofoutputstring - strlen(outputstring)));
+            number_of_zones++;
+
+            if (Send_Or_Length == GET_LENGTH) {
+                length_of_message = length_of_message + strlen(outputstring);
+            }
+            else {
+                client.print(outputstring);
+            }
+        }
+    }
+    outputstring[0] = '\0';
+    strcat(outputstring, "]}");
+    if (Send_Or_Length == GET_LENGTH) {
+        length_of_message = length_of_message + strlen(outputstring);
+    }
+    else {
+        client.println(outputstring);
+    }
+    return length_of_message;
+}
+
+void handleEventHistory() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This returns the current arm state in case it gets out of sync somehow
+    char outputstring[250];
+    char tempchar[30];
+    WiFiClient client = server.client();
+
+    client.print(HTMLHeaderText);
+
+    client.print(F("<html><style>table.center {margin-left: auto; margin-right: auto;} </style><table class=\"center\" style=\"width:400px\"><tr><th>ID</th><th>Time</th><th>Event</th></tr>"));
+    
+    for (int i = 0; i < min(sizeof(eventStatusLog),sizeof(eventStatusLogTime)); i++) {
+        outputstring[0] = '\0';
+        strcat(outputstring, "<tr><td>#");
+        itoa(i, tempchar, 10);
+        strcat(outputstring, tempchar);
+        strcat(outputstring, "</td><td>");
+        sprintf(tempchar, "%02d-%02d-%02d %02d:%02d:%02d", year(eventStatusLogTime[i]), month(eventStatusLogTime[i]), day(eventStatusLogTime[i]), hour(eventStatusLogTime[i]), minute(eventStatusLogTime[i]), second(eventStatusLogTime[i]));
+        strcat(outputstring, tempchar);
+        strcat(outputstring, "</td><td>");
+        if (eventStatusLog[i] < 200) {
+            strcat(outputstring, pm.GetStrPmaxLogEvents(eventStatusLog[i]));
+        }
+        else {
+            strcat(outputstring, pm.GetStrPmaxSystemStatus(eventStatusLog[i] - 200));
+        }
+        strcat(outputstring, "</td></tr>");
+        client.print(outputstring);
+    }
+    client.print("</table></html>");
+    client.stop();
+}
+
+void handleSetupSmartHome() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This is a holding page to configure Smart Home zones
+    server.send(200, "text/html", F("Send info to SmartHome (Caution)<br><a href='/createchildzones'>Create Child Zones</a><br><a href='/removechildzones'>CAUTION Remove Child Zones</a><br><br>"));
+}
+
+void handleRemoveChildZones() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This attempts to remove
+    server.send(200, "text/html", F("Attempting to remove child zones (look at live logging to see any errors)"));
+
+    //Now assemble the message ready to send to SmartHome to remove child zones
+    char tempstring[26];
+    
+    char message_text[100];
+    message_text[0] = '\0';
+    strcat_P(message_text, PSTR("{\"update_type\":\"remove_zones\"}"));
+
+    char header_text[200];
+    header_text[0] = '\0';
+    strcat_P(header_text, PSTR("POST / HTTP/1.1\r\nHost: "));
+    sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+    strcat(header_text, tempstring);
+    strcat(header_text, ":");
+    itoa(Settings.haPort, tempstring, 10);
+    strcat(header_text, tempstring);
+    strcat_P(header_text, PSTR("\r\nContent-Type: application/json;charset=utf-8\r\nContent-Length: "));
+    itoa(strlen(message_text), tempstring, 10);
+    strcat(header_text, tempstring);
+    strcat_P(header_text, PSTR("\r\nServer: Visonic Alarm\r\nConnection: close\r\n\r\n"));
+
+    //Create the connection and send the message
+    WiFiClient client;
+    sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+    if (!client.connect(tempstring, Settings.haPort)) {
+        //Serial.println("connection failed");
+        return;
+    }
+    client.print(header_text);
+    client.print(message_text);
+    client.flush();
+}
+
+void handleCreateChildZones() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This resets the ESP from a web command in case it is needed
+    server.send(200, "text/html", F("Attempting to create child zones"));
+
+    //Now send the message to SmartHome to create child zones
+    sendZoneNames(SEND_TO_SMARTHOME, CREATE_ZONES);
+}
+
+void handleEnableBypass() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    DEBUG(LOG_NOTICE, "Enable Bypass Command received from Web");
+
+    //Start the response
+    char tmpString[64];
+    
+    //If we have received an inactivity timer variable then use it, otherwise use default
+    if (server.hasArg("zones")) {
+        server.arg("zones").toCharArray(tmpString, 26);
+        str2ip(tmpString, pm.Powermax_Bypass_Zones);
+    }
+    else {
+        pm.Powermax_Bypass_Zones[0] = Settings.bypasszones[0];
+        pm.Powermax_Bypass_Zones[1] = Settings.bypasszones[1];
+        pm.Powermax_Bypass_Zones[2] = Settings.bypasszones[2];
+        pm.Powermax_Bypass_Zones[3] = Settings.bypasszones[3];
+    }
+    pm.sendCommand(Pmax_ENABLE_BYPASS);
+    DEBUG(LOG_DEBUG, "bypasszones: %d" , Settings.bypasszones);
+    DEBUG(LOG_DEBUG, "Powermax_Bypass_Zones: %d" , pm.Powermax_Bypass_Zones);
+    
+    // Close the window requesting bypass enable
+    server.send(200, "text/html", F("{\"bypass\":\"enabled\"}"));
+}
+
+void handleDisableBypass() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    DEBUG(LOG_NOTICE, "Disable Bypass Command received from Web");
+
+    //Start the response
+    char tmpString[64];
+    
+    //If we have received an inactivity timer variable then use it, otherwise use default
+    if (server.hasArg("zones")) {
+        server.arg("zones").toCharArray(tmpString, 26);
+        str2ip(tmpString, pm.Powermax_Bypass_Zones);
+    }
+    else {
+        pm.Powermax_Bypass_Zones[0] = Settings.bypasszones[0];
+        pm.Powermax_Bypass_Zones[1] = Settings.bypasszones[1];
+        pm.Powermax_Bypass_Zones[2] = Settings.bypasszones[2];
+        pm.Powermax_Bypass_Zones[3] = Settings.bypasszones[3];
+    }
+    pm.sendCommand(Pmax_DISABLE_BYPASS);
+    
+    // Close the window requesting bypass enable
+    server.send(200, "text/html", F("{\"bypass\":\"disabled\"}"));
+}
+
+void handleConfig() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //Start the response
+    char tmpString[64];
+    WiFiClient client = server.client();
+    client.print(JsonHeaderText);
+    client.print(F("{\"update_config\":\"success\",\r\n"));
+
+    //If we have received an inactivity timer variable then update it
+    if (server.hasArg("inactivity_seconds")) {
+        Settings.inactivity_seconds = atoi(server.arg("inactivity_seconds").c_str());
+
+        client.print("\"inactivity_seconds\":\"");
+        client.print(server.arg("inactivity_seconds").c_str());
+        client.print("\",\r\n");
+    }
+
+    //If we have received an ST IP then update as needed
+    if (server.hasArg("ip_for_st")) {
+        //Update setting
+        server.arg("ip_for_st").toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.haIP);
+        //Respond with current value, even if not needing an update
+        client.print("\"ip_for_st\":\"");
+        client.print(server.arg("ip_for_st").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an ST Port then update as needed
+    if (server.hasArg("port_for_st")) {
+        //Update setting
+        Settings.haPort = server.arg("port_for_st").toInt();
+        //Respond with current value, even if not needing an update
+        client.print("\"port_for_st\":\"");
+        client.print(server.arg("port_for_st").c_str());
+        client.print("\",\r\n");
+    }
+
+    //If we have received an Static IP then update as needed
+    if (server.hasArg("static_ip")) {
+        //Update setting
+        server.arg("static_ip").toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.IP);
+        //Respond with current value, even if not needing an update
+        client.print("\"static_ip\":\"");
+        client.print(server.arg("static_ip").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an Static Gateway then update as needed
+    if (server.hasArg("static_gateway")) {
+        //Update setting
+        server.arg("static_gateway").toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.Gateway);
+        //Respond with current value, even if not needing an update
+        client.print("\"static_gateway\":\"");
+        client.print(server.arg("static_gateway").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an Static Subnet then update as needed
+    if (server.hasArg("static_subnet")) {
+        //Update setting
+        server.arg("static_subnet").toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.Subnet);
+        //Respond with current value, even if not needing an update
+        client.print("\"static_subnet\":\"");
+        client.print(server.arg("static_subnet").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an MQTT Username then update as needed (and try to connect again)
+    if (server.hasArg("use_mqtt")) {
+        //Update setting
+        if (strcmp(server.arg("use_mqtt").c_str(), "true") == 0) {
+            Settings.useMQTT = true;
+            mqtt_setup = false;
+        }
+        else {
+            Settings.useMQTT = false;
+        }
+        //Respond with current value, even if not needing an update
+        client.print("\"mqtt_username\":\"");
+        client.print(server.arg("mqtt_username").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an MQTT Username then update as needed (and try to connect again)
+    if (server.hasArg("mqtt_username")) {
+        //Update setting
+        strncpy(Settings.MQTTUser, server.arg("mqtt_username").c_str(), sizeof(Settings.MQTTUser));
+        //Respond with current value, even if not needing an update
+        client.print("\"mqtt_username\":\"");
+        client.print(server.arg("mqtt_username").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received an MQTT Password then update as needed (and try to connect again)
+    if (server.hasArg("mqtt_password")) {
+        //Update setting
+        strncpy(Settings.MQTTPass, server.arg("mqtt_password").c_str(), sizeof(Settings.MQTTPass));
+        //Respond with current value, even if not needing an update
+        client.print("\"mqtt_password\":\"");
+        client.print(server.arg("mqtt_password").c_str());
+        client.print("\",\r\n");
+    }
+
+    //If we have Powermax PIN then update as needed
+    if (server.hasArg("powermax_pin")) {
+        //Update setting and ensure it is null terminated
+        strncpy(Settings.PowermaxPIN, server.arg("powermax_pin").c_str(), sizeof(Settings.PowermaxPIN));
+        Settings.PowermaxPIN[sizeof(Settings.PowermaxPIN) - 1] = '\0';
+        pm.updatePMaxVariables();
+        //Respond with current value, even if not needing an update
+        client.print("\"powermax_pin\":\"");
+        client.print(server.arg("powermax_pin").c_str());
+        client.print("\",\r\n");
+    }
+
+    //If we have received an inactivity_seconds time
+    if (server.hasArg("inactivity_seconds")) {
+        //Update setting
+        Settings.inactivity_seconds = server.arg("inactivity_seconds").toInt();
+        //Respond with current value, even if not needing an update
+        client.print("\"inactivity_seconds\":\"");
+        client.print(server.arg("inactivity_seconds").c_str());
+        client.print("\",\r\n");
+    }
+    //If we have received a list of bypass zones
+    if (server.hasArg("bypass_zones")) {
+        //Update setting
+        server.arg("bypass_zones").toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.bypasszones);
+        //Respond with current value, even if not needing an update
+        client.print("\"bypass_zones\":\"");
+        client.print(server.arg("bypass_zones").c_str());
+        client.print("\",\r\n");
+    }
+
+    client.print("}\r\n");
+    client.stop();
+
+    //We have tried to do another config, so lets reset mqtt in case this time it connects
+    mqtt_setup = false;
+
+    //Now save the values
+    SaveSettings();
+}
+
+void handleAlarm() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //Check for a method and if so, try to process it
+    if (server.hasArg("method")) {
+        int tempnumber = -1;
+
+        WiFiClient client = server.client();
+        client.print(JsonHeaderText);
+        client.print("{\"alarm_triggered\":\"true\"}");
+
+        if (isDigit(server.arg("method").charAt(0))) {
+            tempnumber = (int)strtol(server.arg("method").c_str(), NULL, 10);
+            //If pin number between 0 and 16 then probably valid pin so lets try switching it!
+            if ((tempnumber <= 16) && (tempnumber >= 0)) {
+                if (activatedPinA == -1) {
+                    activatedPinA = tempnumber;
+                }
+                else {
+                    activatedPinB = tempnumber;
+                }
+                userPinResetTime = millis();
+                digitalWrite(tempnumber, HIGH);
+                pinMode(tempnumber, OUTPUT);
+                digitalWrite(tempnumber, LOW);
+            }
+        }
+        else if (server.arg("method") == "IO") {
+            //Found word IO so trigger default pin change alarm
+            triggerIOAlarm();
+        }
+        else if (server.arg("method") == "Serial") {
+            //Found word serial so send serial trigger to alarm
+            handleTriggerAlarm();
+        }
+
+        //Can't easily close the window now, buts leave here anyway
+        //server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    }
+    else {
+        //No command so send a response to say so
+        server.send(200, "text/html", F("<html><b>To trigger an alarm you must add the argument 'method' e.g. /alarm?method=12 - but use carefully as some pins may crash the Wemos!</b></html>"));
+        return;
+    }
+}
+
+void triggerIOAlarm() {
+    //Trigger default pin changes to cause an alarm (one high and one low)
+    activatedPinA = 99;
+    userPinResetTime = millis();
+    //Make pin 12 go low/off after first making it an output (D6 on Wemos)
+    digitalWrite(12, HIGH);
+    pinMode(12, OUTPUT);
+    digitalWrite(12, LOW);
+    //Make pin 4 go high/on after first making it an output (D2 on Wemos)
+    digitalWrite(4, LOW);
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH);
+}
+
+
+void handleTriggerAlarm() {
+    DEBUG(LOG_NOTICE, "Trigger Alarm Command received from Web");
+    pm.sendCommand(Pmax_ALARM);
+}
+
+void handleArmAway() {
+    DEBUG(LOG_NOTICE, "Arm Away Command received from Web");
+    pm.sendCommand(Pmax_ARMAWAY);
+}
+
+void handleArmHome() {
+    DEBUG(LOG_NOTICE, "Arm Home command received from Web");
+    pm.sendCommand(Pmax_ARMHOME);
+}
+
+void handleDisarm() {
+    DEBUG(LOG_NOTICE, "Disarm command received from Web");
+
+    //If we are already disarmed (i.e. cancelled arming command) then lets send an update message that we are still disarmed rather than pending
+    if ((strcmp(pm.GetStrPmaxSystemStatus(pm.GetSystemStatus()), "Exit Delay") == 0) || (strcmp(pm.GetStrPmaxSystemStatus(pm.GetSystemStatus()), "Disarmed") == 0)) {
+        SendJSONMessage("Disarm", "Arming Cancelled", 0, ALARM_STATE_CHANGE);
+    }
+
+    pm.sendCommand(Pmax_DISARM);
+
+}
+
+void handleArmAwayInstant() {
+    DEBUG(LOG_NOTICE, "Instant Arm Away Command from Web");
+    pm.sendCommand(Pmax_ARMAWAY_INSTANT);
+}
+
+void handleArmHomeInstant() {
+    DEBUG(LOG_NOTICE, "Instant Arm Home command from Web");
+    pm.sendCommand(Pmax_ARMHOME_INSTANT);
+}
+
+void handleRestart() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This restarts the ESP from a web command in case it is needed
+    server.send(200, "text/plain", "ESP is restarting (can also reset with changed URL)");
+    delay(2000);
+    ESP.restart();
+}
+
+void handleReboot() {
+    handleRestart();
+}
+
+void handleReset() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //This resets the ESP from a web command in case it is needed
+    server.send(200, "text/plain", F("ESP is resetting (can also restart with changed URL)"));
+    delay(2000);
+    ESP.reset();
+}
+
+void handleNotFound() {
+    String message = "File Not Found\n\n";
+    message += "URI: ";
+    message += server.uri();
+    message += "\nMethod: ";
+    message += (server.method() == HTTP_GET) ? "GET" : "POST";
+    message += "\nArguments: ";
+    message += server.args();
+    message += "\n";
+    for (uint8_t i = 0; i < server.args(); i++) {
+        message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+    }
+    server.send(404, "text/plain", message);
+}
+
+void handleTest() {
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    //Start the response
+    WiFiClient client = server.client();
+    client.print(JsonHeaderText);
+    client.print("{\"test\":\"");
+
+    //If we have received an inactivity timer variable then update it
+    if (server.hasArg("value")) {
+        char str[8];
+        int tempnumber = atoi(server.arg("value").c_str());
+        sprintf(str, "%#0X", tempnumber);
+        client.print(str);
+        client.print("\"}\r\n");
+        pm.sendCommandCC(tempnumber);
+        client.stop();
+    }
+}
+
+void handleAdvanced() {
+
+    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+        if (!server.authenticate("admin", Settings.UIPassword))
+            return server.requestAuthentication();
+    }
+    char tmpString[64];
+    String haip = server.arg("haip");
+    String haport = server.arg("haport");
+    String usepassword = server.arg("usepassword");
+    String uipassword = server.arg("uipassword");
+    String usestatic = server.arg("usestatic");
+    String staticip = server.arg("staticip");
+    String staticgateway = server.arg("staticgateway");
+    String staticsubnet = server.arg("staticsubnet");
+    String usemqtt = server.arg("usemqtt");
+    String mqttuser = server.arg("mqttuser");
+    String mqttpass = server.arg("mqttpass");
+    String apwhennowifi = server.arg("apwhennowifi");
+    String powermaxpin = server.arg("powermaxpin");
+    String listennotenrol = server.arg("listennotenrol");
+    String slowcomms = server.arg("slowcomms");
+    String wifipower = server.arg("wifipower");
+    String inactivity_seconds = server.arg("inactivity_seconds");
+    String ntp_server = server.arg("ntp_server");
+    String bypass_zones = server.arg("bypass_zones");
+
+    if (haip.length() != 0)
+    {
+        haip.toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.haIP);
+    }
+
+    if (haport.length() != 0)
+    {
+        Settings.haPort = haport.toInt();
+    }
+
+    if (usepassword.length() != 0)
+    {
+        Settings.usePassword = (usepassword == "yes");
+    }
+
+    if (uipassword.length() > 0)
+    {
+        strncpy(Settings.UIPassword, uipassword.c_str(), sizeof(Settings.UIPassword));
+    }
+
+    if (usestatic.length() != 0)
+    {
+        Settings.useStatic = (usestatic == "yes");
+    }
+
+    if (staticip.length() != 0)
+    {
+        staticip.toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.IP);
+    }
+    if (staticsubnet.length() != 0)
+    {
+        staticsubnet.toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.Subnet);
+    }
+    if (staticgateway.length() != 0)
+    {
+        staticgateway.toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.Gateway);
+    }
+
+    if (usemqtt.length() != 0)
+    {
+        Settings.useMQTT = (usemqtt == "yes");
+        mqtt_setup = false;
+    }
+
+    if (mqttuser.length() > 0)
+    {
+        strncpy(Settings.MQTTUser, mqttuser.c_str(), sizeof(Settings.MQTTUser));
+        mqtt_setup = false;
+    }
+
+    if (mqttpass.length() > 0)
+    {
+        strncpy(Settings.MQTTPass, mqttpass.c_str(), sizeof(Settings.MQTTPass));
+        mqtt_setup = false;
+    }
+
+    if (apwhennowifi.length() != 0)
+    {
+        Settings.APWhenNoWiFi = (apwhennowifi == "yes");
+    }
+
+    if (wifipower.length() != 0)
+    {
+        Settings.WiFiPower = wifipower.toInt();
+    }
+
+    if (powermaxpin.length() == 4)
+        //Need a four character pin to convert to a 4 digit hex code
+    {
+        //Save the new PIN code, ensure it is null terminated and send to Powermax
+        strncpy(Settings.PowermaxPIN, powermaxpin.c_str(), sizeof(Settings.PowermaxPIN));
+        Settings.PowermaxPIN[sizeof(Settings.PowermaxPIN) - 1] = '\0';
+        pm.updatePMaxVariables();
+    }
+
+    if (listennotenrol.length() != 0)
+    {
+        Settings.ListenNotEnrol = (listennotenrol == "yes");
+        pm.updatePMaxVariables();
+    }
+
+    if (slowcomms.length() != 0)
+    {
+        Settings.SlowComms = (slowcomms == "yes");
+        pm.updatePMaxVariables();
+    }
+
+    if (inactivity_seconds.length() != 0)
+    {
+        int int_inactivity_seconds = inactivity_seconds.toInt();
+        if ((int_inactivity_seconds > 0) && (int_inactivity_seconds <= 60))
+        {
+            Settings.inactivity_seconds = int_inactivity_seconds;
+        }
+    }
+    
+    if (ntp_server.length() > 0)
+    {
+        strncpy(Settings.NTPServer, ntp_server.c_str(), sizeof(Settings.NTPServer));
+    }
+    else
+    {
+        //Disable NTP as server removed, ideally
+    }
+
+    if (bypass_zones.length() != 0)
+    {
+        bypass_zones.toCharArray(tmpString, 26);
+        str2ip(tmpString, Settings.bypasszones);
+    }
+
+    SaveSettings();
+
+    String reply = "";
+    char str[20];
+    //This adds the CSV and Javascript
+    addHeader(true, reply);
+
+    reply += F("<script src='http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js'></script>");
+
+    reply += F("<form name='frmselect' class='form' method='post'><table>");
+    reply += F("<TH colspan='2'>");
+    reply += F("ESP Settings");
+    reply += F("<TR><TD><TD><TR><TD colspan='2' align='center'>");
+
+    reply += F("<TR><TD><TD><TR><TD>Configure variables and settings<BR>");
+
+    reply += F("<TR><TD>Use UI Password:<TD>");
+    reply += F("<input type='radio' name='usepassword' value='yes'");
+    if (Settings.usePassword) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='usepassword' value='no'");
+    if (!Settings.usePassword) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>Set \"admin\" UI Password:<TD>");
+    reply += F("<input type='password' id='ui_password' name='uipassword' value='");
+    Settings.UIPassword[25] = 0;
+    reply += Settings.UIPassword;
+    reply += F("'>");
+
+    reply += F("<input type='checkbox' id='showPassword' name='show' value='Show'> Show");
+    reply += F("<script type='text/javascript'>");
+    reply += F("$(\"#showPassword\").click(function() {");
+    reply += F("var showPasswordCheckBox = document.getElementById(\"showPassword\");");
+    reply += F("$('.form').find(\"#ui_password\").each(function() {");
+    reply += F("if(showPasswordCheckBox.checked){");
+    reply += F("$(\"<input type='text' />\").attr({ name: this.name, value: this.value, id: this.id}).insertBefore(this);");
+    reply += F("}else{");
+    reply += F("$(\"<input type='password' />\").attr({ name: this.name, value: this.value, id: this.id }).insertBefore(this);");
+    reply += F("}");
+    reply += F("}).remove();");
+    reply += F("});");
+    reply += F("$(document).ready(function() {");
+    reply += F("$(\"#ui_password_checkbox\").click(function() {");
+    reply += F("if ($('input.checkbox_check').attr(':checked')); {");
+    reply += F("$(\"#ui_password\").attr('type', 'text');");
+    reply += F("}});");
+    reply += F("});");
+    reply += F("</script>");
+
+
+    reply += F("<TR><TD>Smart Home Controller IP:<TD><input type='text' name='haip' value='");
+    sprintf_P(str, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+    reply += str;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Smart Home Controller Port:<TD><input type='text' name='haport' value='");
+    reply += Settings.haPort;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Use Static IP:<TD>");
+    reply += F("<input type='radio' name='usestatic' value='yes'");
+    if (Settings.useStatic) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='usestatic' value='no'");
+    if (!Settings.useStatic) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>Static IP:<TD><input type='text' name='staticip' value='");
+    sprintf_P(str, PSTR("%u.%u.%u.%u"), Settings.IP[0], Settings.IP[1], Settings.IP[2], Settings.IP[3]);
+    reply += str;
+    reply += F("'>");
+    reply += F("<TR><TD>Static Subnet:<TD><input type='text' name='staticsubnet' value='");
+    sprintf_P(str, PSTR("%u.%u.%u.%u"), Settings.Subnet[0], Settings.Subnet[1], Settings.Subnet[2], Settings.Subnet[3]);
+    reply += str;
+    reply += F("'>");
+    reply += F("<TR><TD>Static Gateway:<TD><input type='text' name='staticgateway' value='");
+    sprintf_P(str, PSTR("%u.%u.%u.%u"), Settings.Gateway[0], Settings.Gateway[1], Settings.Gateway[2], Settings.Gateway[3]);
+    reply += str;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Set NTP Server Address/IP:<TD>");
+    reply += F("<input type='text' name='ntp_server' value='");
+    Settings.NTPServer[25] = 0;
+    reply += Settings.NTPServer;
+    reply += F("'>");
+    
+    reply += F("<TR><TD>Use MQTT Mode:<TD>");
+    reply += F("<input type='radio' name='usemqtt' value='yes'");
+    if (Settings.useMQTT) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='usemqtt' value='no'");
+    if (!Settings.useMQTT) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>MQTT Username:<TD><input type='text' name='mqttuser' value='");
+    reply += Settings.MQTTUser;
+    reply += F("'>");
+    reply += F("<TR><TD>MQTT Password:<TD><input type='text' name='mqttpass' value='");
+    reply += Settings.MQTTPass;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Broadcast AP if no WiFi (if No hard to change SSID):<TD>");
+    reply += F("<input type='radio' name='apwhennowifi' value='yes'");
+    if (Settings.APWhenNoWiFi) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='apwhennowifi' value='no'");
+    if (!Settings.APWhenNoWiFi) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>WiFi Power Level (0 = minimum, 205 = maximum (205 is default, restart ESP to set)):<TD><input type='text' name='wifipower' value='");
+    reply += Settings.WiFiPower;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Powermax Powerlink PIN (default 3622):<TD><input type='text' name='powermaxpin' value='");
+    reply += Settings.PowermaxPIN;
+    reply += F("'>");
+    reply += F("<TR><TD>Entering a Master/Installer PIN that is already registered in the Powermax may help the Wemos enrol");
+    reply += F("<TR><TD>Normally it is best to this keep separate from your Master PIN. For some rare panels you should enter your");
+    reply += F("<TR><TD>User PIN here to get this working... Changing this should only be done after several pairing attempts");
+    reply += F("<TR><TD>using the default 3622. You may need to reboot after changing PIN");
+
+    reply += F("<TR><TD>Listen only mode (dont try to enrol - only set to true if you have Powermaster or exceptional models):<TD>");
+    reply += F("<input type='radio' name='listennotenrol' value='yes'");
+    if (Settings.ListenNotEnrol) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='listennotenrol' value='no'");
+    if (!Settings.ListenNotEnrol) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>Slow comms mode (for very very old models):<TD>");
+    reply += F("<input type='radio' name='slowcomms' value='yes'");
+    if (Settings.SlowComms) {
+        reply += F(" checked ");
+    }
+    reply += F(">Yes");
+    reply += F("</input>");
+    reply += F("<input type='radio' name='slowcomms' value='no'");
+    if (!Settings.SlowComms) {
+        reply += F(" checked ");
+    }
+    reply += F(">No");
+    reply += F("</input>");
+
+    reply += F("<TR><TD>Inactivity timer (default 20s, max 60s):<TD><input type='text' name='inactivity_seconds' value='");
+    reply += Settings.inactivity_seconds;
+    reply += F("'>");
+
+    reply += F("<TR><TD>Default zones to bypass (enter as IP, byte[0]=zones 1-8):<TD><input type='text' name='bypass_zones' value='");
+    sprintf_P(str, PSTR("%u.%u.%u.%u"), Settings.bypasszones[0], Settings.bypasszones[1], Settings.bypasszones[2], Settings.bypasszones[3]);
+    reply += str;
+    reply += F("'>");
+
+    reply += F("<TR><TD><input type=\"button\" value=\"Go back\" onclick=\"history.back()\"><TD><input class=\"button-link\" type='submit' value='Submit'>");
+    reply += F("</table></form>");
+    //addFooter(reply);
+    server.send(200, "text/html", reply);
+}
+
+void addHeader(boolean showMenu, String& str)
+{
+    boolean cssfile = false;
+
+    str += F("<script language=\"javascript\"><!--\n");
+    str += F("function dept_onchange(frmselect) {frmselect.submit();}\n");
+    str += F("//--></script>");
+    str += F("<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/><title>");
+    str += F("Alarm Controller");
+    str += F("</title>");
+
+    str += F("<style>");
+    str += F("* {font-family:sans-serif; font-size:12pt;}");
+    str += F("h1 {font-size:16pt; color:black;}");
+    str += F("h6 {font-size:10pt; color:black; text-align:center;}");
+    str += F(".button-menu {background-color:#ffffff; color:#000000; margin: 10px; text-decoration:none}");
+    str += F(".button-link {border-radius:0.3rem; padding:5px 15px; background-color:#000000; color:#fff; border:solid 1px #fff; text-decoration:none}");
+    str += F(".button-menu:hover {background:#ddddff;}");
+    str += F(".button-link:hover {background:#707070;}");
+    str += F("th {border-radius:0.3rem; padding:10px; background-color:black; color:#ffffff;}");
+    str += F("td {padding:7px;}");
+    str += F("table {color:black;}");
+    str += F(".div_l {float: left;}");
+    str += F(".div_r {float: right; margin: 2px; padding: 1px 10px; border-radius: 7px; background-color:#080; color:white;}");
+    str += F(".div_br {clear: both;}");
+    str += F("</style>");
+
+    str += F("</head>");
+    str += F("<center>");
+}
+
+
+void setup(void) {
+
+    //First lets make a few common output pins as high just to prevent accidental triggering of the alarm
+    //Paranoid process is to set it high, then make it an output, and then set high just to be super safe
+    digitalWrite(12, HIGH);
+    digitalWrite(13, HIGH);
+    digitalWrite(14, HIGH);
+    digitalWrite(0, HIGH);
+    digitalWrite(4, LOW);
+
+    //Read settings from SPIFFS, increase reset counter and save new reset counter
+    LoadSettings();
+    Settings.resetCounter++;
+    SaveSettings();
+
+    if (Settings.resetCounter >= RESET_LIMIT) {
+        //We have reached reset limit so clear settings and restart
+        EraseFlash();
+        //Now initialise WiFi Manager so we can be sure it flushes the settings too
+        WiFiManager wifiManager;
+        wifiManager.resetSettings();
+        //wifiManager.persistent(false);
+        //wifiManager.disconnect(true);
+        //wifiManager.persistent(true);
+        delay(1000);
+        ESP.restart();
+    }
+
+    //Wait 2s before continuing (this is the boot delay)
+    delay(3500);
+
+    if ((Settings.settingsVersion < 100) || (Settings.settingsVersion == 255)) {
+        str2ip((char*)DEFAULT_HAIP, Settings.haIP);
+        Settings.haPort = DEFAULT_HAPORT;
+        Settings.usePassword = DEFAULT_USE_PASS;
+        strncpy(Settings.UIPassword, DEFAULT_UI_PASS, sizeof(Settings.UIPassword));
+        Settings.useStatic = DEFAULT_USE_STATIC;
+        str2ip((char*)DEFAULT_IP, Settings.IP);
+        str2ip((char*)DEFAULT_GATEWAY, Settings.Gateway);
+        str2ip((char*)DEFAULT_SUBNET, Settings.Subnet);
+        Settings.useMQTT = DEFAULT_USE_MQTT;
+        strncpy(Settings.MQTTUser, DEFAULT_MQTT_USER, sizeof(Settings.MQTTUser));
+        strncpy(Settings.MQTTPass, DEFAULT_MQTT_PASS, sizeof(Settings.MQTTPass));
+        Settings.APWhenNoWiFi = DEFAULT_AP_WHEN_NO_WIFI;
+        Settings.resetCounter = DEFAULT_RESET_COUNTER;
+        Settings.settingsVersion = 100;
+        strncpy(Settings.PowermaxPIN, DEFAULT_POWERMAX_PIN, sizeof(Settings.PowermaxPIN));
+    }
+    if (Settings.settingsVersion < 101) {
+        Settings.ListenNotEnrol = DEFAULT_LISTEN_NOT_ENROL;
+        Settings.SlowComms = DEFAULT_SLOW_COMMS;
+        Settings.settingsVersion = 101;
+    }
+    if (Settings.settingsVersion < 102) {
+        Settings.WiFiPower = DEFAULT_WIFI_POWER;
+        Settings.settingsVersion = 102;
+    }
+    if (Settings.settingsVersion < 103) {
+        Settings.inactivity_seconds = DEFAULT_INACTIVITY_SECONDS;
+        Settings.settingsVersion = 103;
+    }
+    if (Settings.settingsVersion < 104) {
+        strncpy(Settings.NTPServer, DEFAULT_NTP_SERVER, sizeof(Settings.NTPServer));
+        Settings.settingsVersion = 104;
+    }
+    if (Settings.settingsVersion < 105) {
+        str2ip((char*)DEFAULT_BYPASS_ZONES, Settings.bypasszones);
+        Settings.settingsVersion = 105;
+    }
+    
+
+    Settings.resetCounter = 0;
+    SaveSettings();
+
+    //WiFiManager
+    //Local intialization. Once its business is done, there is no need to keep it around
+    WiFiManager wifiManager;
+
+    //Try and use static IP address if one is loaded
+    if (Settings.useStatic == true) {
+        wifiManager.setSTAStaticIPConfig(Settings.IP, Settings.Gateway, Settings.Subnet);
+    }
+
+    //sets timeout until configuration portal gets turned off
+    //useful to make it all retry or go to sleep
+    //in seconds
+    wifiManager.setTimeout(180);
+    wifiManager.setDebugOutput(false);
+
+    //fetches ssid and pass and tries to connect
+    //if it does not connect it starts an access point with the specified name
+    //and goes into a blocking loop awaiting configuration
+    if (Settings.APWhenNoWiFi == true) {
+        if (!wifiManager.autoConnect("VisonicPowermaxBridge")) {
+            //Serial.println("failed to connect and hit timeout");
+            delay(3000);
+            //reset and try again, or maybe put it to deep sleep
+            ESP.reset();
+            delay(5000);
+        }
+    }
+    else {
+        //Here we are choosing to never re-broadcast an access point, hence hard to change SSID as it will not bring up the portal automatically
+        //Could do a non blocking mode here but not needed wifiManager.setConfigPortalBlocking(false);
+        //wifiManager.begin();
+    }
+
+    //Now setup variables for use in SSDP/mDNS
+    char macstring[16];
+    byte mac[6];
+    WiFi.macAddress(mac);
+    sprintf(macstring, "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    // Set up mDNS responder:
+    char mdnsname[30] = "espPowermaxBridge-";
+    mdnsname[strlen(mdnsname)] = macstring[8];
+    mdnsname[strlen(mdnsname)] = macstring[9];
+    mdnsname[strlen(mdnsname)] = macstring[10];
+    mdnsname[strlen(mdnsname)] = macstring[11];
+    mdnsname[strlen(mdnsname)] = '\0';
+    if (!MDNS.begin(mdnsname)) {
+        //Serial.println("Error setting up MDNS responder!");
+        while (1) {
+            delay(1000);
+        }
+    }
+
+    //Here we will set the WiFi power based on the stored setting
+    float powerlevel;
+    powerlevel = (float)Settings.WiFiPower / 10.0;
+    WiFi.setOutputPower(powerlevel);
+
+    //Now get the current time and ensure it updates to the right server and interval (1 day)
+    timeClient.setUpdateInterval(86400000);
+    timeClient.setPoolServerName(Settings.NTPServer);
+    timeClient.begin();
+
+    server.on("/", handleRoot);
+    server.on("/status", handleStatus);
+    server.on("/eventhistory", handleEventHistory);
+    server.on("/settings", handleSettings);
+    server.on("/refresh", handleRefresh);
+    server.on("/getzonenames", handleGetZoneNames);
+    server.on("/setupsmarthome", handleSetupSmartHome);
+    server.on("/createchildzones", handleCreateChildZones);
+    server.on("/removechildzones", handleRemoveChildZones);
+    server.on("/config", handleConfig);
+    server.on("/enablebypass", handleEnableBypass);
+    server.on("/disablebypass", handleDisableBypass);
+    server.on("/advanced", handleAdvanced);
+    server.on("/restart", handleRestart);
+    server.on("/reset", handleReset);
+    server.on("/reboot", handleReboot);
+    server.on("/test", handleTest);
+    server.on("/alarm", handleAlarm);
+    server.on("/armaway", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        handleArmAway();
+        server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    });
+    server.on("/armhome", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        handleArmHome();
+        server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    });
+    server.on("/disarm", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        handleDisarm();
+        server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    });
+    server.on("/armawayinstant", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        handleArmAwayInstant();
+        server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    });
+    server.on("/armhomeinstant", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        handleArmHomeInstant();
+        server.send(200, "text/html", " {} <body> window.onload = <script> window.close() </script>; </body>");
+    });
+    server.on("/ping", []() {
+        if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
+            if (!server.authenticate("admin", Settings.UIPassword))
+                return server.requestAuthentication();
+        }
+        server.send(200, "text/plain", "{\"ping_alive\": true}");
+    });
+    server.on("/description.xml", HTTP_GET, []() {
+        SSDP.schema(server.client());
+    });
+
+#ifdef PM_ENABLE_WEB_UPDATES
+    //Link the HTTP Updater with the web sesrver
+    httpUpdater.setup(&server);
+#endif
+#ifdef PM_ENABLE_OTA_UPDATES
+    //Prepare to receive OTA firmware updates (i.e. from within Arduino Studio)
+    ArduinoOTA.begin();
+#endif
+
+    server.onNotFound(handleNotFound);
+    server.begin();
+
+
+    //Now initialise SSDP
+    SSDP.setSchemaURL("description.xml");
+    SSDP.setHTTPPort(80);
+    SSDP.setName("Powermax Alarm Interface Device");
+    SSDP.setSerialNumber(macstring);
+    SSDP.setURL("\\");
+    SSDP.setModelName("Powermax Alarm ESP Interface");
+    SSDP.setModelNumber(macstring);
+    SSDP.setModelURL(F("https://community.hubitat.com/t/release-visonic-interlogix-networx-elk-alarm-bridge/55040"));
+    SSDP.setManufacturer("Chris Charles");
+    SSDP.setManufacturerURL(F("https://community.hubitat.com/t/release-visonic-interlogix-networx-elk-alarm-bridge/55040"));
+    SSDP.setDeviceType("upnp:rootdevice");
+    SSDP.begin();
+
+    // Add service to MDNS-SD
+    MDNS.addService("http", "tcp", 80);
+
+    //We set up serial at the end of the sketch as connecting to WiFi after Serial is running sometimes causes crashes
+    Serial.begin(9600); //open serial ready to connect to PowerMax interface
+    //New serial1 code - it will work as TX only on D8 (pin13)
+    Serial1.begin(57600);
+    //Serial1.setDebugOutput(true);
+
+#ifdef PM_ENABLE_TELNET_ACCESS
+    telnetServer.begin();
+    telnetServer.setNoDelay(true);
+#endif
+
+    //if you have a fast board (like PowerMax Complete) you can pass 0 to init function like this: pm.init(0);
+    //this will speed up the boot process, keep it as it is, if you have issues downloading the settings from the board.
+    //Also ensure Powermax sees the latest PIN from the Settings storage
+    pm.updatePMaxVariables();
+    pm.init();
+}
+
+#ifdef PM_ENABLE_TELNET_ACCESS
+void handleNewTelnetClients()
+{
+    if (telnetServer.hasClient())
+    {
+        if (telnetClient.connected())
+        {
+            //no free/disconnected spot so reject
+            WiFiClient newClient = telnetServer.available();
+            newClient.stop();
+        }
+        else
+        {
+            telnetClient = telnetServer.available();
+            LOG("Connected to WiFi, type '?' for help.\r\n");
+        }
+    }
+}
+
+void runDirectRelayLoop()
+{
+    while (telnetClient.connected())
+    {
+        bool wait = true;
+
+        //we want to read/write in bulk as it's much faster than read one byte -> write one byte (this is known to create problems with PowerMax)
+        unsigned char buffer[256];
+        int readCnt = 0;
+        while (readCnt < 256)
+        {
+            if (Serial.available())
+            {
+                buffer[readCnt] = Serial.read();
+                readCnt++;
+                wait = false;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (readCnt > 0)
+        {
+            telnetClient.write((const uint8_t *)buffer, readCnt );
+        }
+
+        if (telnetClient.available())
+        {
+            Serial.write( telnetClient.read() );
+            wait = false;
+        }
+
+        if (wait)
+        {
+            delay(10);
+        }
+    }
+}
+
+void handleTelnetRequests(PowerMaxAlarm* pm) {
+    char c;
+    if ( telnetClient.connected() && telnetClient.available() )  {
+        c = telnetClient.read();
+
+        if (pm->isConfigParsed() == false &&
+                (c == 'h' || //arm home
+                 c == 'a' || //arm away
+                 c == 'd'))  //disarm
+        {
+            //DEBUG(LOG_NOTICE,"EPROM is not download yet (no PIN requred to perform this operation)");
+            return;
+        }
+
+#ifdef PM_ALLOW_CONTROL
+        if ( c == 'h' ) {
+            DEBUG(LOG_NOTICE, "Arming home");
+            pm->sendCommand(Pmax_ARMHOME);
+        }
+        else if ( c == 'd' ) {
+            DEBUG(LOG_NOTICE, "Disarm");
+            pm->sendCommand(Pmax_DISARM);
+        }
+        else if ( c == 'a' ) {
+            DEBUG(LOG_NOTICE, "Arming away");
+            pm->sendCommand(Pmax_ARMAWAY);
+        }
+        else if ( c == 'D' ) {
+            DEBUG(LOG_NO_FILTER, "Direct relay enabled, disconnect to stop...");
+            runDirectRelayLoop();
+        }
+#endif
+
+        if ( c == 'g' ) {
+            DEBUG(LOG_NOTICE, "Get Event log");
+            pm->sendCommand(Pmax_GETEVENTLOG);
+        }
+        else if ( c == 't' ) {
+            DEBUG(LOG_NOTICE, "Restore comms");
+            pm->sendCommand(Pmax_RESTORE);
+        }
+        else if ( c == 'v' ) {
+            DEBUG(LOG_NOTICE, "Exit Download mode");
+            pm->sendCommand(Pmax_DL_EXIT);
+        }
+        else if ( c == 'r' ) {
+            DEBUG(LOG_NOTICE, "Request Status Update");
+            pm->sendCommand(Pmax_REQSTATUS);
+        }
+        else if ( c == 'j' ) {
+            ConsoleOutput out;
+            pm->dumpToJson(&out);
+        }
+        else if ( c == 'c' ) {
+            DEBUG(LOG_NOTICE, "Exiting...");
+            telnetClient.stop();
+        }
+        else if ( c == 'C' ) {
+            DEBUG(LOG_NOTICE, "Reseting...");
+            ESP.reset();
+        }
+        else if ( c == 'p' ) {
+            telnetDbgLevel = LOG_DEBUG;
+            DEBUG(LOG_NOTICE, "Debug Logs enabled type 'P' (capital) to disable");
+        }
+        else if ( c == 'P' ) {
+            telnetDbgLevel = LOG_NO_FILTER;
+            DEBUG(LOG_NO_FILTER, "Debug Logs disabled");
+        }
+        else if ( c == 'H' ) {
+            DEBUG(LOG_NO_FILTER, "Free Heap: %u", ESP.getFreeHeap());
+        }
+        else if ( c == 'Q' ) {
+            DEBUG(LOG_NO_FILTER, "Forwarding ALL alarm messages");
+            send_telnet_debug = true;
+        }
+        else if ( c == '?' )
+        {
+            DEBUG(LOG_NO_FILTER, "Allowed commands:");
+            DEBUG(LOG_NO_FILTER, "\t c - exit");
+            DEBUG(LOG_NO_FILTER, "\t C - reset device");
+            DEBUG(LOG_NO_FILTER, "\t p - output debug messages");
+            DEBUG(LOG_NO_FILTER, "\t P - stop outputing debug messages");
+#ifdef PM_ALLOW_CONTROL
+            DEBUG(LOG_NO_FILTER, "\t h - Arm Home");
+            DEBUG(LOG_NO_FILTER, "\t d - Disarm");
+            DEBUG(LOG_NO_FILTER, "\t a - Arm Away");
+            DEBUG(LOG_NO_FILTER, "\t D - Direct mode (relay all bytes from client to PMC and back with no processing, close connection to exit");
+#endif
+            DEBUG(LOG_NO_FILTER, "\t g - Get Event Log");
+            DEBUG(LOG_NO_FILTER, "\t t - Restore Comms");
+            DEBUG(LOG_NO_FILTER, "\t v - Exit download mode");
+            DEBUG(LOG_NO_FILTER, "\t r - Request Status Update");
+            DEBUG(LOG_NO_FILTER, "\t j - Dump Application Status to JSON");
+            DEBUG(LOG_NO_FILTER, "\t H - Get free heap");
+            DEBUG(LOG_NO_FILTER, "\t Q - Send raw debug messages");
+
+
+        }
+    }
+}
+#endif
+
+#ifdef PM_ENABLE_LAN_BROADCAST
+void broadcastPacketOnLan(const PlinkBuffer* commandBuffer, bool packetOk)
+{
+    udp.beginPacketMulticast(PM_LAN_BROADCAST_IP, PM_LAN_BROADCAST_PORT, WiFi.localIP());
+    udp.write("{ data: [");
+    for (int ix = 0; ix < commandBuffer->size; ix++)
+    {
+        char szDigit[20];
+        //sprintf(szDigit, "%d", commandBuffer->buffer[ix]);
+        sprintf(szDigit, "%02x", commandBuffer->buffer[ix]); //IZIZTODO: temp
+
+        if (ix + 1 != commandBuffer->size)
+        {
+            strcat(szDigit, ", ");
+        }
+
+        udp.write(szDigit);
+    }
+
+    udp.write("], ok: ");
+    if (packetOk)
+    {
+        udp.write("true");
+    }
+    else
+    {
+        udp.write("false");
+    }
+
+    char szTmp[50];
+    sprintf(szTmp, ", seq: %u }", packetCnt++);
+    udp.write(szTmp);
+
+    udp.endPacket();
+}
+#endif
+
+bool serialHandler(PowerMaxAlarm* pm) {
+
+    bool packetHandled = false;
+
+    PlinkBuffer commandBuffer ;
+    memset(&commandBuffer, 0, sizeof(commandBuffer));
+
+    char oneByte = 0;
+    while (  (os_pmComPortRead(&oneByte, 1) == 1)  )
+    {
+        // wait for the preamble
+        if (commandBuffer.size == 0 && oneByte != 0x0D)
+            continue;
+
+        if (commandBuffer.size < (MAX_BUFFER_SIZE - 1))
+        {
+            *(commandBuffer.size + commandBuffer.buffer) = oneByte;
+            commandBuffer.size++;
+
+            if (oneByte == 0x0A) //postamble received, let's see if we have full message
+            {
+                if (PowerMaxAlarm::isBufferOK(&commandBuffer))
+                {
+                    DEBUG(LOG_INFO, "--- new packet %d ----", millis());
+
+#ifdef PM_ENABLE_LAN_BROADCAST
+                    broadcastPacketOnLan(&commandBuffer, true);
+#endif
+
+                    //New serial1 code
+                    Serial1.print("Read1: ");
+                    if (send_telnet_debug) {telnetClient.print("Read1: ");}
+                    for (int ix = 0; ix < commandBuffer.size; ix++) {
+                        if ((int)commandBuffer.buffer[ix] < 16) Serial1.print("0");
+                        Serial1.print(commandBuffer.buffer[ix], HEX);
+                        Serial1.print(" ");
+                        if (send_telnet_debug)
+                        {
+                            if ((int)commandBuffer.buffer[ix] < 16) telnetClient.print("0");
+                            telnetClient.print(commandBuffer.buffer[ix], HEX);
+                            telnetClient.print(" ");
+                        }
+                    }
+                    Serial1.println("");
+                    if (send_telnet_debug) {telnetClient.println("");}
+
+                    packetHandled = true;
+                    pm->handlePacket(&commandBuffer);
+                    commandBuffer.size = 0;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            DEBUG(LOG_WARNING, "Packet too big detected");
+        }
+    }
+
+    if (commandBuffer.size > 0)
+    {
+#ifdef PM_ENABLE_LAN_BROADCAST
+        broadcastPacketOnLan(&commandBuffer, false);
+#endif
+
+        //New serial1 code
+        Serial1.print("Read2: ");
+        if (send_telnet_debug) {telnetClient.print("Read1: ");}
+        for (int ix = 0; ix < commandBuffer.size; ix++) {
+            if ((int)commandBuffer.buffer[ix] < 16) Serial1.print("0");
+            Serial1.print(commandBuffer.buffer[ix], HEX);
+            Serial1.print(" ");
+            if (send_telnet_debug)
+            {
+               if ((int)commandBuffer.buffer[ix] < 16) telnetClient.print("0");
+               telnetClient.print(commandBuffer.buffer[ix], HEX);
+               telnetClient.print(" ");
+            }
+        }
+        Serial1.println("");
+        if (send_telnet_debug) {telnetClient.println("");}
+
+        packetHandled = true;
+        //this will be an invalid packet:
+        DEBUG(LOG_WARNING, "Passing invalid packet to packetManager");
+        pm->handlePacket(&commandBuffer);
+    }
+
+    return packetHandled;
+}
+
+void loop(void) {
+    //Some variables to check for message timing
+    
+#ifdef PM_ENABLE_OTA_UPDATES
+    ArduinoOTA.handle();
+#endif
+
+    server.handleClient();
+
+    //Here we also check if we need to send any inactivity messages to ST
+    pm.CheckInactivityTimers();
+    
+    //And update NTP if needed (and also if millis has wrapped)
+    static unsigned long lastMillisNumber = 0;
+    timeClient.update();
+    if (millis() < lastMillisNumber) {
+        timeClient.forceUpdate();
+    }
+    lastMillisNumber = millis();
+
+    if (Settings.APWhenNoWiFi == false) {
+        //Here we could do something specific to bring up an access point, or process wifi to remove blocking mode, but not yet
+        //WiFiManager Local intialization. Once its business is done, there is no need to keep it around
+        //WiFiManager wifiManager;
+        //if (!wifiManager.startConfigPortal("VisonicPowermaxBridge")) {
+        //  Serial.println("failed to connect and hit timeout");
+        //  delay(3000);
+        //  //reset and try again, or maybe put it to deep sleep
+        //  ESP.reset();
+        //  delay(5000);
+        //}
+        ////if you get here you have connected to the WiFi
+        //Serial.println("connected...yeey :)");
+        //}
+        //wifiManager.process();
+    }
+
+    if (Settings.useMQTT == true) {
+        //If we havent saved mqtt details then do it now
+        if (!mqtt_setup) {
+            //MQTT not yet fully initialised, so initialise
+            //mqtt.setKeepAlive();
+            mqtt.setCallback(mqttcallback);
+            char tempstring[26];
+            sprintf_P(tempstring, PSTR("%u.%u.%u.%u"), Settings.haIP[0], Settings.haIP[1], Settings.haIP[2], Settings.haIP[3]);
+            mqtt.setServer(tempstring, Settings.haPort);
+            mqtt_setup = true;
+            mqtt_last_reconnect = 0;
+        }
+
+        //Now run loop to give mqtt some processing time
+        //The delay allows a bit of time for the ESP to manage network connections aswell
+        mqtt.loop();
+        delay(30);
+
+        //Non blocking function to either reconnect mqtt or to call loop which allows mqtt connection management
+        if (!mqtt.connected()) {
+          long now = millis();
+          if (now - mqtt_last_reconnect > 8000) {
+            //Over 8s since last connection attempt so try again (to prevent spamming the server too much)
+            mqtt_last_reconnect = now;
+            // Attempt to reconnect
+            if (mqttreconnect()) {
+              mqtt_last_reconnect = 0;
+            }
+            else {
+              mqtt_setup = false; // if it fails to reconnect, try to run the mqtt setup again for next cycle.
+            }
+          }
+        }
+        else {
+          // Client connected
+        }
+
+        //And give mqtt even more time to process things
+        mqtt.loop();
+    }
+
+    //Here we reset manual pin timers in case they are running (i.e. output relay pin is on)
+    if (userPinResetTime > 0) {
+        if ((millis() - userPinResetTime >= 5000)) {
+            userPinResetTime = 0;
+            if (activatedPinA == 99) {
+                //This is for default (IO) alarm triggering (12 and 4 mean D6 and D4 respectively)
+                digitalWrite(12, HIGH);
+                digitalWrite(4, LOW);
+                activatedPinA = -1;
+            }
+            if (activatedPinA != -1) {
+                digitalWrite(activatedPinA, HIGH);
+                activatedPinA = -1;
+            }
+            if (activatedPinB != -1) {
+                digitalWrite(activatedPinB, HIGH);
+                activatedPinB = -1;
+            }
+        }
+    }
+
+    //Check serial is being handled
+    static unsigned long lastMsg = 0;
+    static unsigned int MessageSeparation = 300;
+    if (serialHandler(&pm) == true)
+    {
+        lastMsg = millis();
+    }
+
+
+    if (Settings.SlowComms) {
+        MessageSeparation = 700;
+    }
+    else {
+        MessageSeparation = 300;
+    }
+
+    if (millis() - lastMsg > MessageSeparation || millis() < lastMsg) //we ensure a small delay between commands, as it can confuse the alarm (it has a slow CPU)
+    {
+        pm.sendNextCommand();
+    }
+
+    if (pm.restoreCommsIfLost()) //if we fail to get PINGs from the alarm - we will attempt to restore the connection
+    {
+        DEBUG(LOG_WARNING, "Connection lost. Sending RESTORE request.");
+    }
+
+#ifdef PM_ENABLE_TELNET_ACCESS
+    handleNewTelnetClients();
+    handleTelnetRequests(&pm);
+#endif
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//This file contains OS specific implementation for ESP8266 used by PowerMax library
+//If you build for other platrorms (like Linux or Windows, don't include this file, but provide your own)
+
+int log_console_setlogmask(int mask)
+{
+    int oldmask = telnetDbgLevel;
+    if (mask == 0)
+        return oldmask; /* POSIX definition for 0 mask */
+    telnetDbgLevel = mask;
+    return oldmask;
+}
+
+void os_debugLog(int priority, bool raw, const char *function, int line, const char *format, ...)
+{
+    if (priority <= telnetDbgLevel)
+    {
+        char buf[PRINTF_BUF];
+        va_list ap;
+
+        va_start(ap, format);
+        vsnprintf(buf, sizeof(buf), format, ap);
+
+#ifdef PM_ENABLE_TELNET_ACCESS
+        if (telnetClient.connected())
+        {
+            telnetClient.write((const uint8_t *)buf, strlen(buf));
+            if (raw == false)
+            {
+                telnetClient.write((const uint8_t *)"\r\n", 2);
+            }
+        }
+#endif
+
+        va_end(ap);
+
+        yield();
+    }
+}
+
+void os_usleep(int microseconds)
+{
+    delay(microseconds / 1000);
+}
+
+unsigned long os_getCurrentTimeSec()
+{
+    static unsigned int wrapCnt = 0;
+    static unsigned long lastVal = 0;
+    unsigned long currentVal = millis();
+
+    if (currentVal < lastVal)
+    {
+        wrapCnt++;
+    }
+
+    lastVal = currentVal;
+    unsigned long seconds = currentVal / 1000;
+
+    //millis will wrap each 50 days, as we are interested only in seconds, let's keep the wrap counter
+    return (wrapCnt * 4294967) + seconds;
+}
+
+int os_pmComPortRead(void* readBuff, int bytesToRead)
+{
+    int dwTotalRead = 0;
+    while (bytesToRead > 0)
+    {
+        for (int ix = 0; ix < 10; ix++)
+        {
+            if (Serial.available())
+            {
+                break;
+            }
+            delay(5);
+        }
+
+        if (Serial.available() == false)
+        {
+            break;
+        }
+
+        *((char*)readBuff) = Serial.read();
+        dwTotalRead ++;
+        readBuff = ((char*)readBuff) + 1;
+        bytesToRead--;
+    }
+
+    return dwTotalRead;
+}
+
+int os_pmComPortWrite(const void* dataToWrite, int bytesToWrite)
+{
+    Serial.write((const uint8_t*)dataToWrite, bytesToWrite);
+
+    //New debug code (serial1 and telnet)
+    if (send_telnet_debug) {
+      if (!telnetClient.connected()) {
+        //If no longer connected via telnet then stop debugging messages
+        send_telnet_debug = false;
+      }
+    }
+
+    //New serial1 code
+    Serial1.print("Writing: ");
+    if (send_telnet_debug) {telnetClient.print("Writing: ");}
+    const uint8_t *tempcharpointer;
+    tempcharpointer = (uint8_t *) dataToWrite;
+    for (int ix = 0; ix < bytesToWrite; ix++) {
+        if ((int)tempcharpointer[ix] < 16) Serial1.print("0");
+        Serial1.print(tempcharpointer[ix], HEX);
+        Serial1.print(" ");
+        if (send_telnet_debug)
+        {
+            if ((int)tempcharpointer[ix] < 16) telnetClient.print("0");
+            telnetClient.print(tempcharpointer[ix], HEX);
+            telnetClient.print(" ");
+        }
+    }
+    Serial1.println("");
+    if (send_telnet_debug) {telnetClient.println("");}
+
+    return bytesToWrite;
+}
+
+bool os_pmComPortClose()
+{
+    return true;
+}
+
+bool os_pmComPortInit(const char* portName) {
+    return true;
+}
+
+void os_strncat_s(char* dst, int dst_size, const char* src)
+{
+    strncat(dst, src, dst_size);
+}
+
+int os_cfg_getPacketTimeout()
+{
+    return PACKET_TIMEOUT_DEFINED;
+}
+
+//see PowerMaxAlarm::setDateTime for details of the parameters, if your OS does not have a RTC clock, simply return false
+bool os_getLocalTime(unsigned char& years, unsigned char& months, unsigned char& days, unsigned char& hours, unsigned char& minutes, unsigned char& seconds)
+{
+    unsigned long currenttime = timeClient.getEpochTime();
+
+    //Set the characters according to Visonic specs (e.g. years since 2000)
+    years = year(currenttime) - 2000;
+    months = month(currenttime);
+    days = day(currenttime);
+    hours = hour(currenttime);
+    minutes = minute(currenttime);
+    seconds = second(currenttime);
+    
+    return true;
+    //return false; //IZIZTODO
+}
+//////End of OS specific part of PM library/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
