@@ -35,10 +35,9 @@ metadata
 		attribute "armaway", "string"
 		attribute "armhome", "string"
 		attribute "disarm", "string"
-		
-		command "AlarmArmAway"
-		command "AlarmArmHome"
-		command "AlarmDisarm"
+
+        command "ArmAwayInstant"
+        command "ArmHomeInstant"
 		command "AlarmTrigger"
         
         command "push"
@@ -175,7 +174,11 @@ metadata
 	])
 }
 
-def AlarmArmAway()
+private AlarmArmHome() { ArmHome() }
+private AlarmArmAway() { ArmAway() }
+private AlarmDisarm() { Disarm() }
+
+def ArmAway()
 {
 	// Send an arm away command to the alarm and log that it is changing
 	if (settings.debuglogs) log.debug "armaway()"
@@ -186,7 +189,7 @@ def AlarmArmAway()
 	getAction("/armaway")
 }
 
-def AlarmArmHome()
+def ArmHome()
 {
 	// Send an arm home command to the alarm and log that it is changing
 	if (settings.debuglogs) log.debug "armhome()"
@@ -198,7 +201,7 @@ def AlarmArmHome()
 	getAction("/armhome")
 }
 
-def AlarmArmAwayInstant()
+def ArmAwayInstant()
 {
 	// Send an arm away instant command to the alarm and log that it is changing
 	if (settings.debuglogs) log.debug "armawayinstant()"
@@ -209,7 +212,7 @@ def AlarmArmAwayInstant()
 	getAction("/armawayinstant")
 }
 
-def AlarmArmHomeInstant()
+def ArmHomeInstant()
 {
 	// Send an arm home instant command to the alarm and log that it is changing
 	if (settings.debuglogs) log.debug "armhomeinstant()"
@@ -220,7 +223,7 @@ def AlarmArmHomeInstant()
 	getAction("/armhomeinstant")
 }
 
-def AlarmDisarm()
+def Disarm()
 {
 	// Send a disarm command to the alarm and log that it is changing
 	// May need the required output connected to a keyswitch zone
