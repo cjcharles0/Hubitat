@@ -174,9 +174,9 @@ metadata
 	])
 }
 
-private AlarmArmHome() { ArmHome() }
-private AlarmArmAway() { ArmAway() }
-private AlarmDisarm() { Disarm() }
+def AlarmArmHome() { ArmHome() }
+def AlarmArmAway() { ArmAway() }
+def AlarmDisarm() { Disarm() }
 
 def ArmAway()
 {
