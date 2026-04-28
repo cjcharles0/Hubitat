@@ -14,7 +14,7 @@
  *
  *  Author: Chris Charles (cjcharles0)
  *  Date: 2024-01-12
- *  Version: 1.8
+ *  Version: 1.7
  */
 
 import groovy.json.JsonSlurper
@@ -46,6 +46,10 @@ metadata
 		
 		command "ChildDevicesCreate"
 		command "ChildDevicesRemove"
+        
+        command "componentOn"
+        command "componentOff"
+        command "componentRefresh"
         
 		/*(0..1).each { n ->
 			command "on$n"
@@ -84,9 +88,15 @@ metadata
 }
 
 // Old methods used for testing and avoid breaking anything
-def AlarmArmHome() { ArmHome() }
-def AlarmArmAway() { ArmAway() }
-def AlarmDisarm() { Disarm() }
+def AlarmArmHome() {
+    ArmHome()
+}
+def AlarmArmAway() {
+    ArmAway()
+}
+def AlarmDisarm() {
+    Disarm()
+}
 
 def ArmAway()
 {
@@ -237,19 +247,19 @@ def componentOn(child)
         case ["alarmdisarm"]:
             log.debug "Disarming Alarm"
             runIn(2, delayedComponentOff, [data: child.deviceNetworkId])
-            AlarmDisarm()
+            Disarm()
             break
 
         case ["alarmarmaway"]:
             log.debug "Arming Alarm Away"
             runIn(2, delayedComponentOff, [data: child.deviceNetworkId])
-            AlarmArmAway()
+            ArmAway()
             break
 
         case ["alarmarmhome"]:
             log.debug "Arming Alarm Home"
             runIn(2, delayedComponentOff, [data: child.deviceNetworkId])
-            AlarmArmHome()
+            ArmHome()
             break
 
         case ~/alarmchildoutput.*/:
@@ -331,22 +341,22 @@ def ping()
 // These functions are needed due to the alarm device capability and hence will serve to arm/disarm the alarm (though unlikely to be called)
 def stop()
 {
-	AlarmDisarm()
+	Disarm()
 }
 
 def off()
 {
-	AlarmDisarm()
+	Disarm()
 }
 
 def strobe()
 {
-	AlarmArmHome()
+	ArmHome()
 }
 
 def siren()
 {
-	AlarmArmAway()
+	ArmAway()
 }
 
 def both()
