@@ -14,7 +14,7 @@
  *
  *  Author: Chris Charles (cjcharles0)
  *  Date: 2024-01-12
- *  Version: 1.7
+ *  Version: 1.8
  */
 
 import groovy.json.JsonSlurper
@@ -25,9 +25,7 @@ metadata
 	{
 		capability "Refresh"
 		capability "Configuration"
-        capability "Alarm"
         capability "Actuator"
-        capability "Security Keypad"
 		
 		attribute "alarmStatus", "string"
 		attribute "alarmEvents", "string"
@@ -36,6 +34,9 @@ metadata
 		attribute "armhome", "string"
 		attribute "disarm", "string"
 
+        command "ArmAway"
+        command "ArmHome"
+        command "Disarm"
         command "ArmAwayInstant"
         command "ArmHomeInstant"
 		command "AlarmTrigger"
@@ -46,14 +47,10 @@ metadata
 		command "ChildDevicesCreate"
 		command "ChildDevicesRemove"
         
-        command "componentOn"
-        command "componentOff"
-        command "componentRefresh"
-        
-		(1..1).each { n ->
+		/*(0..1).each { n ->
 			command "on$n"
 			command "off$n"
-		}
+		}*/
 	}
 
 	simulator {
@@ -69,95 +66,7 @@ metadata
 		input name: "alarmtriggermethod", type: "enum", title: "Method to trigger alarm", options: ["Serial", "IO"], description: "Default IO if unsure", required: true, displayDuringSetup: true
 		input name: "inactivityseconds", type: "string", title:"Motion sensor inactivity timeout", description: "override the default of 20s (60s max)", required: false, displayDuringSetup: false
 		input name: "password", type: "password", title:"Password", required:false, displayDuringSetup:false
-		input name: "bypassedzones", type: "string", title:"Zones to bypass (up to zone 30)", description: "Stored as an IP address - 1.0.0.0 = zone 1, 5.0.0.0 = zone 1&3 and 8.2.0.0 = zones 4&10", required:false, displayDuringSetup:false
-	}
-
-	tiles (scale: 2)
-	{
-
-		valueTile("alarmStatus", "device.alarmStatus", decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'${currentValue}'
-		}
-		valueTile("alarmEvents", "device.alarmEvents", decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'${currentValue}'
-		}
-		valueTile("problemtext", "device.problemtext", decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'${currentValue}'
-		}
-
-		standardTile("AlarmArmAway", "armaway", height: 2, width:2, decoration:"flat", inactiveLabel: false)
-		{
-			state "inactive", label:"Away", action:"AlarmArmAway", backgroundColor:"#D8D8D8"
-			state "changing", label:"Arming Away", action:"", backgroundColor:"#FF9900"
-			state "active", label:"Armed Away", action:"", backgroundColor:"#00CC00"
-		}
-		standardTile("AlarmArmHome", "armhome", height: 2, width: 2, decoration:"flat", inactiveLabel: false)
-		{
-			state "inactive", label:"Home", action:"AlarmArmHome", backgroundColor:"#D8D8D8"
-			state "changing", label:"Arming Home", action:"", backgroundColor:"#FF9900"
-			state "active", label:"Armed Home", action:"", backgroundColor:"#00CC00"
-		}
-		standardTile("AlarmDisarm", "disarm", height: 2, width: 2, decoration:"flat", inactiveLabel: false)
-		{
-			state "inactive", label:"Disarm", action:"AlarmDisarm", backgroundColor:"#D8D8D8"
-			state "changing", label:"Disarming", action:"", backgroundColor:"#FF9900"
-			state "active", label:"Disarmed", action:"", backgroundColor:"#00CC00"
-		}
-		
-		// This will create a tile for all zones up to 32 (which should cover most boards including Wired ones)
-		// We can have all of these tiles, but not display them
-		(1..32).each { n ->
-			valueTile("zonename$n", "panelzonename$n", height: 1, width: 2) {
-				state "default", label:'${currentValue}', backgroundColor:"#FFFFFF"
-			}
-			standardTile("zone$n", "panelzone$n", height: 1, width: 1) {
-				state "inactive", label:"Inactive", action:"", icon:""
-				state "active", label:"Active", action:"", icon:"", backgroundColor:"#00CC00"
-				state "closed", label:"Closed", action:"", icon:""
-				state "open", label:"Open", action:"", icon:"", backgroundColor:"#00CC00"
-				state "bypass", label:"Bypass", action:"", icon:"", backgroundColor:"#FFD800"
-				state "smoke", label:"Smoke", action:"", icon:"", backgroundColor:"#FF3F00"
-				state "clear", label:"Clear", action:"", icon:""
-			}
-		}
-        
-		// This will create an output tile as needed for control of some alarm panels (not Visonic)
-		(1..8).each { n ->
-			valueTile("outputname$n", "paneloutputname$n", height: 1, width: 2) {
-				state "default", label:'${currentValue}', backgroundColor:"#FFFFFF"
-			}
-			standardTile("output$n", "paneloutput$n", height: 1, width: 1) {
-				state "on", label:"On", action:"off$n", icon:"", backgroundColor:"#00CC00"
-				state "off", label:"Off", action:"on$n", icon:""
-			}
-		}
-        
-		standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 1, height: 1)
-		{
-			state "default", label:"", action:"refresh", icon:"st.secondary.refresh"
-		}
-	  
-		standardTile("configure", "device.configure", inactiveLabel: false, width: 1, height: 1, decoration: "flat")
-		{
-			state "default", label:'', action:"configure", icon:"st.secondary.configure"
-		}
-
-		valueTile("ip", "ip", decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'ST IP Addr:\r\n${currentValue}'
-		}
-		
-		standardTile("createtile", "device.childdevicescreate", inactiveLabel: false, decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'Child Devices Create', action:"ChildDevicesCreate"
-		}
-		standardTile("removetile", "device.childdevicesremove", inactiveLabel: false, decoration: "flat", width: 2, height: 1)
-		{
-			state "default", label:'Child Devices Remove', action:"ChildDevicesRemove"
-		}
+		input name: "bypassedzones", type: "string", title:"Zones to bypass (up to zone 30)", description: "Stored as an IP address - 3.0.0.0 = zone 1&2, 129.0.0.0 = zone 1&8 and 8.2.0.0 = zones 4&10", required:false, displayDuringSetup:false
 	}
 
 	main(["AlarmStatus"])
@@ -174,6 +83,7 @@ metadata
 	])
 }
 
+// Old methods used for testing and avoid breaking anything
 def AlarmArmHome() { ArmHome() }
 def AlarmArmAway() { ArmAway() }
 def AlarmDisarm() { Disarm() }
