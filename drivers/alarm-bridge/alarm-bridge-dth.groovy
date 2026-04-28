@@ -14,7 +14,7 @@
  *
  *  Author: Chris Charles (cjcharles0)
  *  Date: 2024-01-12
- *  Version: 1.7
+ *  Version: 1.8
  */
 
 import groovy.json.JsonSlurper
