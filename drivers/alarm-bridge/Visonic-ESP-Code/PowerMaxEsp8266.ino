@@ -1,4 +1,4 @@
-#include <pmax.h>
+#include "pmax.h"
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
@@ -12,6 +12,12 @@
 
 #include <NTPClient.h>
 #include <TimeLib.h>
+
+//////////////////////////////////////////////////////////////////////////////////
+// BUILD REQUIREMENT: ESP8266 Arduino core 3.0.0 or later.
+//   (WiFiServer::accept() replaced the deprecated available() in 3.0.0)
+// Install via Boards Manager: "esp8266 by ESP8266 Community", 3.x
+//////////////////////////////////////////////////////////////////////////////////
 
 //////////////////// IMPORTANT DEFINES, ADJUST TO YOUR NEEDS //////////////////////
 //////////////////// COMMENT DEFINE OUT to disable a feature  /////////////////////
@@ -59,13 +65,18 @@ extern "C" uint32_t _SPIFFS_block;
 #define DEFAULT_AP_WHEN_NO_WIFI        true
 #define DEFAULT_RESET_COUNTER          0
 #define RESET_LIMIT                    5
-#define DEFAULT_POWERMAX_PIN           "3622"
+// "XXXX" (or anything that is not exactly 4 hex digits) means "no override, use the
+// user code read out of the panel".
+#define DEFAULT_POWERMAX_PIN           "XXXX"
 #define DEFAULT_LISTEN_NOT_ENROL       false
 #define DEFAULT_SLOW_COMMS             false
 #define DEFAULT_WIFI_POWER             205
 #define DEFAULT_INACTIVITY_SECONDS     20
 #define DEFAULT_NTP_SERVER             "pool.ntp.org"
 #define DEFAULT_BYPASS_ZONES           "0.0.0.0"
+// "XXXX" (or anything that is not exactly 4 hex digits) means "no override,
+// work through the built-in download-code ladder 5650 -> AAAA -> BBBB -> 3622".
+#define DEFAULT_DOWNLOAD_CODE          "XXXX"
 
 struct SettingsStruct
 {
@@ -90,6 +101,11 @@ struct SettingsStruct
     int           inactivity_seconds;
     char          NTPServer[26];
     byte          bypasszones[4];
+    // NOTE: this struct is written to flash with a raw memcpy, so NEW FIELDS MUST
+    // BE APPENDED HERE and given a settingsVersion migration block in setup().
+    // Inserting a field mid-struct silently corrupts every existing user's settings.
+    //Download/enrolment code. "XXXX" (or anything not 4 hex digits) = auto-detect.
+    char          DownloadCode[5];      // added in settingsVersion 108
 } Settings;
 
 
@@ -265,7 +281,6 @@ class MyPowerMax : public PowerMaxAlarm
         bool zone_motion[MAX_ZONE_COUNT + 1] = {0};
         byte zone_in_use[MAX_ZONE_COUNT + 1] = {0};
         
-        //long Powerlink_PIN_Code = 0x3622;
 
         virtual void OnStatusChange(const PlinkBuffer  * Buff)
         {
@@ -347,7 +362,10 @@ class MyPowerMax : public PowerMaxAlarm
             if (zoneId < MAX_ZONE_COUNT &&
                     zone[zoneId].enrolled)
             {
-                return zone[zoneId].sensorType;
+                // Guard: sensorType can be NULL if B0 0x1F (DEVICE_TYPES) has not
+                // arrived yet but the zone was enrolled via A5 0x06 or B0 0x1D.
+                // strncpy(dst, NULL, n) is undefined behaviour and crashes on ESP.
+                return zone[zoneId].sensorType ? zone[zoneId].sensorType : "Unknown";
             }
             return "Unknown";
         }
@@ -445,43 +463,60 @@ class MyPowerMax : public PowerMaxAlarm
             }
         }
 
+        //Returns true when str is exactly 4 hex digits, and writes the value to *out.
+        //Anything else (empty, "XXXX", a typo, wrong length) is treated as "not set".
+        static bool parseHex4(const char* str, long* out) {
+            if (str == NULL) return false;
+            if (strlen(str) != 4) return false;
+            long value = 0;
+            for (int i = 0; i < 4; i++) {
+                char c = str[i];
+                int digit;
+                if (c >= '0' && c <= '9')      digit = c - '0';
+                else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+                else return false;
+                value = (value << 4) | digit;
+            }
+            *out = value;
+            return true;
+        }
+
         void updatePMaxVariables() {
-            //First update the PIN which is the most important part
+            //User PIN - 4 hex digits forces that code on arm/disarm/bypass. Anything else
+            //(e.g. the default "XXXX") means "use whatever code we read from the panel".
             long longPIN;
-            longPIN = strtol(Settings.PowermaxPIN, NULL, 16);
-            if ((longPIN >= 0) && (longPIN <= 65535)) {
-                //We now have a valid PIN so lets update the PMax Library
-                Powerlink_PIN_Code = longPIN;
+            if (parseHex4(Settings.PowermaxPIN, &longPIN)) {
+                Powerlink_User_PIN_Code = longPIN;
             }
             else {
-                strncpy(Settings.PowermaxPIN, DEFAULT_POWERMAX_PIN, sizeof(Settings.PowermaxPIN));
-                SaveSettings();
-                Powerlink_PIN_Code = 0x3622;
+                Powerlink_User_PIN_Code = USER_PIN_NO_OVERRIDE;
             }
+
+            //Download code - used for DL_START and enrolment. Not 4 hex digits (e.g. the
+            //default "XXXX") means "no override", so the library walks its own ladder.
+            long longDL;
+            if (parseHex4(Settings.DownloadCode, &longDL)) {
+                Powerlink_DownloadCode_Override = longDL;
+            }
+            else {
+                Powerlink_DownloadCode_Override = DL_CODE_NO_OVERRIDE;
+            }
+            //Apply the override (or lack of it) straight away
+            resetDownloadCode();
+
             //Now update slow comms and listen/enrol flags to help with some panels
             Powerlink_ListenNotEnrol = Settings.ListenNotEnrol;
             Powerlink_SlowComms = Settings.SlowComms;
         }
 
-        bool sendCommandCC(int commandvalue) {
-
-            unsigned char buff[] = {0xA1, 0x00, 0x00, 0x07, 0x12, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x43}; addPin(buff, 4, true);
-            char str[1];
-            sprintf(str, "%#X", commandvalue);
-            buff[3] = commandvalue;
-
-            unsigned short i;
-            char printBuffer[MAX_BUFFER_SIZE * 3 + 3];
-            char *bufptr;      /* Current char in buffer */
-            bufptr = printBuffer;
-            for (i = 0; i < (sizeof(buff)); i++) {
-                sprintf(bufptr, "%02X ", buff[i]);
-                bufptr = bufptr + 3;
-            }
-
-            DEBUG(LOG_DEBUG, "BufferSize: %d" , sizeof(buff));
-            DEBUG(LOG_DEBUG, "Buffer: %s", printBuffer);
-            return sendBuffer(buff, sizeof(buff));
+        // MERGED: Called by pmax_merged when a PowerMaster panel requests a baud-rate change.
+        // Reinitialise the hardware UART at the new rate so subsequent serial I/O is correct.
+        virtual void OnBaudRateChange(unsigned int newBaudRate)
+        {
+            DEBUG(LOG_INFO, "OnBaudRateChange: switching Serial to %u baud", newBaudRate);
+            Serial.flush();
+            Serial.begin(newBaudRate);
         }
 
 };
@@ -875,6 +910,9 @@ void handleSettings() {
 
     client.print("\",\r\n\"powermax_pin\":\"");
     client.print((Settings.PowermaxPIN));
+
+    client.print("\",\r\n\"download_code\":\"");
+    client.print((Settings.DownloadCode));
 
     client.print("\",\r\n\"firmware_date\":\"");
     client.print(Firmware_Date);
@@ -1310,6 +1348,18 @@ void handleConfig() {
         client.print("\",\r\n");
     }
 
+    //If we have a download code (pairing/enrolment) then update as needed
+    if (server.hasArg("download_code")) {
+        //Update setting and ensure it is null terminated
+        strncpy(Settings.DownloadCode, server.arg("download_code").c_str(), sizeof(Settings.DownloadCode));
+        Settings.DownloadCode[sizeof(Settings.DownloadCode) - 1] = '\0';
+        pm.updatePMaxVariables();
+        //Respond with current value, even if not needing an update
+        client.print("\"download_code\":\"");
+        client.print(server.arg("download_code").c_str());
+        client.print("\",\r\n");
+    }
+
     //If we have received an inactivity_seconds time
     if (server.hasArg("inactivity_seconds")) {
         //Update setting
@@ -1481,28 +1531,6 @@ void handleNotFound() {
     server.send(404, "text/plain", message);
 }
 
-void handleTest() {
-    if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
-        if (!server.authenticate("admin", Settings.UIPassword))
-            return server.requestAuthentication();
-    }
-    //Start the response
-    WiFiClient client = server.client();
-    client.print(JsonHeaderText);
-    client.print("{\"test\":\"");
-
-    //If we have received an inactivity timer variable then update it
-    if (server.hasArg("value")) {
-        char str[8];
-        int tempnumber = atoi(server.arg("value").c_str());
-        sprintf(str, "%#0X", tempnumber);
-        client.print(str);
-        client.print("\"}\r\n");
-        pm.sendCommandCC(tempnumber);
-        client.stop();
-    }
-}
-
 void handleAdvanced() {
 
     if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
@@ -1523,6 +1551,7 @@ void handleAdvanced() {
     String mqttpass = server.arg("mqttpass");
     String apwhennowifi = server.arg("apwhennowifi");
     String powermaxpin = server.arg("powermaxpin");
+    String downloadcode = server.arg("downloadcode");
     String listennotenrol = server.arg("listennotenrol");
     String slowcomms = server.arg("slowcomms");
     String wifipower = server.arg("wifipower");
@@ -1606,6 +1635,15 @@ void handleAdvanced() {
         //Save the new PIN code, ensure it is null terminated and send to Powermax
         strncpy(Settings.PowermaxPIN, powermaxpin.c_str(), sizeof(Settings.PowermaxPIN));
         Settings.PowermaxPIN[sizeof(Settings.PowermaxPIN) - 1] = '\0';
+        pm.updatePMaxVariables();
+    }
+
+    if (downloadcode.length() == 4)
+        //Four characters either way - a real code, or the "XXXX" auto sentinel.
+        //updatePMaxVariables() decides which by checking for 4 valid hex digits.
+    {
+        strncpy(Settings.DownloadCode, downloadcode.c_str(), sizeof(Settings.DownloadCode));
+        Settings.DownloadCode[sizeof(Settings.DownloadCode) - 1] = '\0';
         pm.updatePMaxVariables();
     }
 
@@ -1783,13 +1821,28 @@ void handleAdvanced() {
     reply += Settings.WiFiPower;
     reply += F("'>");
 
-    reply += F("<TR><TD>Powermax Powerlink PIN (default 3622):<TD><input type='text' name='powermaxpin' value='");
+    reply += F("<TR><TD><b>User PIN</b> - 4 hex digits, or XXXX for auto:<TD><input type='text' name='powermaxpin' value='");
     reply += Settings.PowermaxPIN;
     reply += F("'>");
-    reply += F("<TR><TD>Entering a Master/Installer PIN that is already registered in the Powermax may help the Wemos enrol");
-    reply += F("<TR><TD>Normally it is best to this keep separate from your Master PIN. For some rare panels you should enter your");
-    reply += F("<TR><TD>User PIN here to get this working... Changing this should only be done after several pairing attempts");
-    reply += F("<TR><TD>using the default 3622. You may need to reboot after changing PIN");
+    reply += F("<TR><TD>The code sent with <b>arm / disarm / bypass</b> commands. It is NOT used for pairing.");
+    reply += F("<TR><TD>Leave as <b>XXXX</b> and we use the panel's <b>first</b> user code, which we read out");
+    reply += F("<TR><TD>of the panel itself. That works for most people.");
+    reply += F("<TR><TD>If arm/disarm does not work try changing the pin to another of the <i>user_pins</i> on the Status page.");
+    reply += F("<TR><TD>(you will hear no response and see <i>Access denied</i> in the telnet log if the PIN is incorrect)");
+    reply += F("<TR><TD>This is also required if you use 'Listen only mode', where we never enrol with the alarm.");
+    reply += F("<TR><TD>You may need to reboot after changing it. Firmware update may reset this.");
+
+    reply += F("<TR><TD><b>Download code</b> - 4 hex digits, or XXXX for auto:<TD><input type='text' name='downloadcode' value='");
+    reply += Settings.DownloadCode;
+    reply += F("'>");
+    reply += F("<TR><TD>This is the code used to <b>pair/enrol</b> with the panel (Installer menu &rarr; Download code).");
+    reply += F("<TR><TD>Leave as <b>XXXX</b> and the bridge tries the known factory defaults in turn:");
+    reply += F("<TR><TD>&nbsp;&nbsp;&nbsp;<b>5650</b> (PowerMax default) &rarr; <b>AAAA</b> (PowerMaster default) &rarr; <b>BBBB</b> &rarr; <b>3622</b>");
+    reply += F("<TR><TD>(3622 is last because older versions of this bridge registered it with the panel,");
+    reply += F("<TR><TD>so panels paired before will still let us back in.)");
+    reply += F("<TR><TD>Only fill this in if your panel has a <b>custom</b> download code that is not in that list -");
+    reply += F("<TR><TD>it will then be tried first, with the list above as a fallback. See forums if not working.");
+    reply += F("<TR><TD><i>Note: a firmware update resets this to XXXX - re-enter it if you had one set.</i>");
 
     reply += F("<TR><TD>Listen only mode (dont try to enrol - only set to true if you have Powermaster or exceptional models):<TD>");
     reply += F("<input type='radio' name='listennotenrol' value='yes'");
@@ -1897,7 +1950,9 @@ void setup(void) {
     //Wait 2s before continuing (this is the boot delay)
     delay(3500);
 
-    if ((Settings.settingsVersion < 100) || (Settings.settingsVersion == 255)) {
+    boolean freshInstall = ((Settings.settingsVersion < 100) || (Settings.settingsVersion == 255));
+
+    if (freshInstall) {
         str2ip((char*)DEFAULT_HAIP, Settings.haIP);
         Settings.haPort = DEFAULT_HAPORT;
         Settings.usePassword = DEFAULT_USE_PASS;
@@ -1934,6 +1989,23 @@ void setup(void) {
     if (Settings.settingsVersion < 105) {
         str2ip((char*)DEFAULT_BYPASS_ZONES, Settings.bypasszones);
         Settings.settingsVersion = 105;
+    }
+    if (Settings.settingsVersion < 108) {
+        //Both code fields are now pure overrides sitting on top of a defined default:
+        //   Download code : XXXX = work through the known factory defaults in turn
+        //   User PIN      : XXXX = use the user code read out of the panel
+        //
+        //Force both back to XXXX on upgrade. In older builds a single field meant
+        //different things at different times (download code, enrolment code, arm PIN),
+        //so carrying any of it forward would silently turn it into an override the user
+        //never asked for. Starting from the defaults means the panel is driven by the
+        //auto behaviour unless someone deliberately overrides it, and re-entering a
+        //custom code afterwards is a few seconds of work.
+        strncpy(Settings.DownloadCode, DEFAULT_DOWNLOAD_CODE, sizeof(Settings.DownloadCode));
+        Settings.DownloadCode[sizeof(Settings.DownloadCode) - 1] = '\0';
+        strncpy(Settings.PowermaxPIN, DEFAULT_POWERMAX_PIN, sizeof(Settings.PowermaxPIN));
+        Settings.PowermaxPIN[sizeof(Settings.PowermaxPIN) - 1] = '\0';
+        Settings.settingsVersion = 108;
     }
     
 
@@ -2019,7 +2091,6 @@ void setup(void) {
     server.on("/restart", handleRestart);
     server.on("/reset", handleReset);
     server.on("/reboot", handleReboot);
-    server.on("/test", handleTest);
     server.on("/alarm", handleAlarm);
     server.on("/armaway", []() {
         if (Settings.UIPassword[0] != 0 && Settings.usePassword == true) {
@@ -2128,12 +2199,13 @@ void handleNewTelnetClients()
         if (telnetClient.connected())
         {
             //no free/disconnected spot so reject
-            WiFiClient newClient = telnetServer.available();
+            //(accept() replaced the deprecated available() in ESP8266 core 3.0.0)
+            WiFiClient newClient = telnetServer.accept();
             newClient.stop();
         }
         else
         {
-            telnetClient = telnetServer.available();
+            telnetClient = telnetServer.accept();
             LOG("Connected to WiFi, type '?' for help.\r\n");
         }
     }
@@ -2328,6 +2400,7 @@ bool serialHandler(PowerMaxAlarm* pm) {
     memset(&commandBuffer, 0, sizeof(commandBuffer));
 
     char oneByte = 0;
+    int expectedLen = 0;   //0 = length not known, terminate on the first plausible 0x0A
     while (  (os_pmComPortRead(&oneByte, 1) == 1)  )
     {
         // wait for the preamble
@@ -2339,7 +2412,29 @@ bool serialHandler(PowerMaxAlarm* pm) {
             *(commandBuffer.size + commandBuffer.buffer) = oneByte;
             commandBuffer.size++;
 
-            if (oneByte == 0x0A) //postamble received, let's see if we have full message
+            //PowerMaster B0 messages declare their own length, so use it rather than
+            //guessing where the message ends.
+            //    0D B0 <msgType> <subType> <msgLen> ...data... <crc> 0A   -> total = msgLen + 8
+            //
+            //Without this we stop at the first 0x0A that appears *inside* the data and
+            //whose preceding byte happens to equal the CRC of the short prefix. That is
+            //not hypothetical: a PowerMaster 30 sending B0 03 2D (zone types) has 0A 0A in
+            //the data (zone type 0x0A = 24 Hours Audible) and the 27-byte prefix CRCs to
+            //exactly 0x0A, so the message is silently truncated - every time, because the
+            //zone type data does not change.
+            if (expectedLen == 0 && commandBuffer.size == 5 && commandBuffer.buffer[1] == 0xB0)
+            {
+                int declared = (int)commandBuffer.buffer[4] + 8;
+                //Only trust it if it fits the buffer, otherwise fall back to the old behaviour
+                if (declared > 5 && declared < (MAX_BUFFER_SIZE - 1))
+                {
+                    expectedLen = declared;
+                }
+            }
+
+            //Postamble received - but for a message whose length we know, ignore any 0x0A
+            //that turns up before we have all of it.
+            if (oneByte == 0x0A && (expectedLen == 0 || commandBuffer.size >= expectedLen))
             {
                 if (PowerMaxAlarm::isBufferOK(&commandBuffer))
                 {
