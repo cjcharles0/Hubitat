@@ -2658,7 +2658,10 @@ void os_debugLog(int priority, bool raw, const char *function, int line, const c
         va_list ap;
 
         va_start(ap, format);
-        vsnprintf(buf, sizeof(buf), format, ap);
+        //The DEBUG/DEBUG_RAW macros wrap the format string in PSTR(), so it lives in
+        //flash and has to be read with the _P variant. Using plain vsnprintf() here
+        //would read from the wrong address space and print rubbish (or crash).
+        vsnprintf_P(buf, sizeof(buf), format, ap);
 
 #ifdef PM_ENABLE_TELNET_ACCESS
         if (telnetClient.connected())
