@@ -1333,7 +1333,12 @@ void PowerMaxAlarm::processSettings()
                 }
                 else
                 {
-                    pZone->zoneType    = readBuff[iCnt*4-1];
+                    // Only the low nibble is the zone type; the upper nibble carries
+                    // something else (not yet identified) and is set on some zones.
+                    // Without the mask a value like 0x24 falls off the end of the
+                    // 17-entry type table and shows as "??" instead of "Delay 1".
+                    // The PowerMaster branch above has always masked this.
+                    pZone->zoneType    = readBuff[iCnt*4-1] & 0x0F;
                     pZone->zoneTypeStr = GetStrPmaxZoneTypes(pZone->zoneType);
                     pZone->sensorId    = readBuff[iCnt*4-2];
 
