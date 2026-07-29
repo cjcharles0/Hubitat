@@ -94,6 +94,10 @@ Private VMSG_PM_KEEPALIVE {&HB0, &H01, &H6A, &H00, &H43]                        
 // Can we enrol ourselves by sending AB 0A, or must the installer do it at the panel?
 // Mirrors CFG.AUTO_ENROL. PowerMax and PowerMax+ / Pro (1,2) need manual enrolment.
 #define VCFG_AUTO_ENROL   { 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0 }
+// Does the panel support the INIT command (AB 0A 00 01)?  Mirrors CFG.INIT_SUPPORT.
+// Only meaningful once the panel type is known from the 0x3C, which is why INIT is
+// never sent on a first connection - see init().
+#define VCFG_INIT_SUPPORT { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0 }
 
 // ############################################################
 // setDateTime helper
@@ -310,7 +314,6 @@ bool PowerMaxAlarm::sendCommand(PmaxCommand cmd)
             buff[4] = dl & 0xFF;
             DEBUG(LOG_INFO,"DL_START using download code %04X (%s)", dl,
                   (m_iDlCodeIndex < 0) ? "user override" : "ladder");
-            m_bDlStartPending = true;
             return queueCommand(buff, sizeof(buff), "Pmax_DL_START", 0x3C, "PIN:DownloadCode:3");
         }
 
@@ -669,7 +672,7 @@ void PowerMaxAlarm::resetDownloadCode()
     // Start from the user override when one is configured, otherwise the ladder.
     m_iDlCodeIndex    = (Powerlink_DownloadCode_Override == DL_CODE_NO_OVERRIDE) ? 0 : -1;
     m_iDlCodeAdvances = 0;
-    m_bDlStartPending = false;
+    m_iDlCodeRetry    = 0;
 }
 
 bool PowerMaxAlarm::advanceDownloadCode()
@@ -706,10 +709,12 @@ void PowerMaxAlarm::init(int initWaitTime)
     resetDownloadCode();               // always restart the ladder from the user override
     m_bAbSupported           = true;   // safe default until the 0x3C tells us the panel type
     m_bAutoEnrol             = false;  // do not send AB 0A until we know the panel accepts it
+    m_bInitSupported         = false;  // likewise for INIT
     m_bPowerlinkAlive        = false;
     m_iEnrolAttempts         = 0;
     m_ulNextEnrolAttempt     = 0;
     m_partitionMask          = 0x07;   // all partitions until the EPROM tells us otherwise
+    m_bPartitionsEnabled     = false;
     m_ackTypeForLastMsg   = ACK_1;
     m_ulLastPing          = os_getCurrentTimeSec();
     m_ulNextPingDeadline  = ULONG_MAX;
@@ -722,10 +727,20 @@ void PowerMaxAlarm::init(int initWaitTime)
     lastIoTime = 0;
     memset(zone, 0, sizeof(zone));
 
-    // Exit any lingering download mode first
+    // Exit any lingering download mode first.
     PowerMaxAlarm::sendCommand(Pmax_DL_EXIT);
-    PowerMaxAlarm::sendCommand(Pmax_INIT);
-    // First DL_START is likely to get Access Denied → panel requests enrolment
+
+    // NOTE: we deliberately do NOT send INIT (AB 0A 00 01) here.
+    //
+    // Whether a panel supports INIT depends on its type, and the panel type only
+    // arrives in the 0x3C reply to the DL_START below - so at this point we cannot
+    // know.  The HA integration has the same problem and resolves it the same way:
+    // it gates INIT on pmInitSupportedByPanel, which is False until a 0x3C has been
+    // received, so a first connection never sends it.
+    //
+    // Sending it here also put it 300ms ahead of DL_START, close enough that a
+    // rejection of the INIT could be mistaken for a rejection of the download code,
+    // and close enough that DL_START could land while the panel was still busy.
     PowerMaxAlarm::sendCommand(Pmax_DL_START);
 }
 
@@ -830,7 +845,6 @@ void PowerMaxAlarm::OnPanelInfo(const PlinkBuffer* Buff)
     this->m_iModelType = Buff->buffer[5];
     this->m_bPowerMaster = (this->m_iPanelType >= 7);
     // The download code we are currently on is the one the panel just accepted.
-    this->m_bDlStartPending = false;
 
     // Learn what this panel type can actually do.  Until the 0x3C arrives we assume
     // AB is supported (true for every panel except the 360/360R) and that we cannot
@@ -838,15 +852,18 @@ void PowerMaxAlarm::OnPanelInfo(const PlinkBuffer* Buff)
     {
         const unsigned char tblAb[]   = VCFG_AB_SUPPORTED;
         const unsigned char tblAuto[] = VCFG_AUTO_ENROL;
+        const unsigned char tblInit[] = VCFG_INIT_SUPPORT;
         const int cnt = (int)(sizeof(tblAb)/sizeof(tblAb[0]));
         if(this->m_iPanelType >= 0 && this->m_iPanelType < cnt)
         {
-            this->m_bAbSupported = (tblAb[this->m_iPanelType]   != 0);
-            this->m_bAutoEnrol   = (tblAuto[this->m_iPanelType] != 0);
+            this->m_bAbSupported   = (tblAb[this->m_iPanelType]   != 0);
+            this->m_bAutoEnrol     = (tblAuto[this->m_iPanelType] != 0);
+            this->m_bInitSupported = (tblInit[this->m_iPanelType] != 0);
         }
-        DEBUG(LOG_INFO,"Panel capabilities: AB messages=%s, auto-enrol=%s",
-              this->m_bAbSupported ? "yes" : "no",
-              this->m_bAutoEnrol   ? "yes" : "no");
+        DEBUG(LOG_INFO,"Panel capabilities: AB messages=%s, auto-enrol=%s, INIT=%s",
+              this->m_bAbSupported   ? "yes" : "no",
+              this->m_bAutoEnrol     ? "yes" : "no",
+              this->m_bInitSupported ? "yes" : "no");
     }
 
     this->sendCommand(Pmax_ACK);
@@ -1192,6 +1209,7 @@ void PowerMaxAlarm::processSettings()
             if(mask != 0)
             {
                 m_partitionMask = mask;
+                m_bPartitionsEnabled = true;
                 DEBUG(LOG_INFO,"Panel uses partitions, arm/disarm will target mask 0x%02X", mask);
             }
         }
@@ -1437,26 +1455,49 @@ void PowerMaxAlarm::OnTimeOut(const PlinkBuffer* Buff)
 //   a) DL_START (0x24) with the wrong *download* code  -> try the next code
 //   b) a command such as 0xA1 arm/disarm with the wrong *user* PIN -> nothing we
 //      can usefully do automatically, just report it
-// m_bDlStartPending is only true between queueing a DL_START and receiving the
-// 0x3C that answers it, so case (b) can never trigger a code change.
+// We tell them apart by looking at what was actually last transmitted.
 void PowerMaxAlarm::OnAccessDenied(const PlinkBuffer* Buff)
 {
-    if(m_bDlStartPending && m_iPanelType == -1)
+    // Only treat this as a rejected download code when the last thing we actually put on
+    // the wire was a DL_START (0x24).  m_lastSentCommand is written by sendBuffer(), so
+    // it reflects what was really transmitted - unlike a flag set at queue time, which
+    // would still be set while init()'s DL_EXIT (0x0F) and INIT (AB 0A 00 01) are going
+    // out ahead of the DL_START, and would blame their rejection on a download code that
+    // had not been tried yet.  This mirrors the HA integration, which attributes an
+    // Access Denied by inspecting the last command it sent.
+    const unsigned char lastCmd = (m_lastSentCommand.size > 0) ? m_lastSentCommand.buffer[0] : 0x00;
+
+    DEBUG(LOG_INFO,"Access denied (last command sent was 0x%02X)", lastCmd);
+
+    if(lastCmd == 0x24 && m_iPanelType == -1)
     {
-        // We asked to start download and the panel rejected the code.
-        if(advanceDownloadCode())
+        // Forget the last command so that a second, duplicate rejection for the same
+        // DL_START cannot be counted twice.
+        m_lastSentCommand.size = 0;
+        // Clear download mode so the retry does not log "Already in Download Mode?"
+        m_bDownloadMode = false;
+        this->clearQueue();
+
+        if(m_iDlCodeRetry == 0)
         {
-            // Clear download mode so the retry does not log "Already in Download Mode?"
-            m_bDownloadMode   = false;
-            m_bDlStartPending = false;
-            this->clearQueue();
+            // The FIRST DL_START of a connection is commonly refused even when the code
+            // is correct - the panel is not ready to start a download this soon after
+            // DL_EXIT.  This is long standing behaviour, not a wrong code, so retry the
+            // same code once before blaming it.  Without this the ladder advances on a
+            // refusal that says nothing about the code, and a panel whose code really is
+            // 5650 ends up paired on whichever entry happened to come next.
+            m_iDlCodeRetry++;
+            DEBUG(LOG_INFO,"DL_START refused, retrying the same download code %04X", getDownloadCode());
             this->sendCommand(Pmax_DL_START);
         }
         else
         {
-            // Give up rotating; stop hammering the panel.  Comms carry on so the
-            // user can still see the logs and correct the code by hand.
-            m_bDlStartPending = false;
+            // Refused twice with the same code - now it is fair to call it wrong.
+            m_iDlCodeRetry = 0;
+            if(advanceDownloadCode())
+            {
+                this->sendCommand(Pmax_DL_START);
+            }
         }
         return;
     }
@@ -1494,9 +1535,33 @@ void PowerMaxAlarm::OnStatusUpdate(const PlinkBuffer* Buff)
 }
 
 // 0xA7 – armed/disarmed/alarm
+//
+// buffer[1] is a message count. Panels normally send 1 to 4 events in one A7, but
+// they also send a count of 0xFF which is a completely different layout.
+//
+// On a panel with partitions that 0xFF form cannot be trusted: the HA integration
+// tried decoding it and got armed/disarmed events that were never commanded, so it
+// now ignores those messages entirely when partitions are in use.  We saw the same
+// thing here - a PowerMaster 30 sending "A7 FF 00 00 61 ..." which we were logging
+// as an "Installer Programming" event, filling the event history.
 void PowerMaxAlarm::OnStatusChange(const PlinkBuffer* Buff)
 {
     this->sendCommand(Pmax_ACK);
+
+    const unsigned char msgCnt = Buff->buffer[1];
+
+    if(msgCnt == 0xFF && this->m_bPartitionsEnabled)
+    {
+        DEBUG(LOG_INFO,"A7 with count 0xFF on a partitioned panel - not processed (unreliable)");
+        return;
+    }
+
+    if(msgCnt > 4 && msgCnt != 0xFF)
+    {
+        DEBUG(LOG_WARNING,"A7 claims %d events which is too many to be valid - not processed", msgCnt);
+        return;
+    }
+
     DEBUG(LOG_INFO,"PmaxStatusChange: '%s' by '%s'(0x%X)",
           GetStrPmaxLogEvents(Buff->buffer[4]),
           GetStrPmaxEventSource(Buff->buffer[3]), Buff->buffer[3]);
@@ -2332,6 +2397,17 @@ void PowerMaxAlarm::dumpToJson(IOutput* outputStream)
     outputStream->writeJsonTag("panelTypeStr",     GetStrPmaxPanelType(m_iPanelType));
     outputStream->writeJsonTag("panelModelType",   m_iModelType);
     outputStream->writeJsonTag("powerMaster",      m_bPowerMaster);
+
+    // The download code actually in use, and where it came from. Without this the only
+    // way to tell a user override from a ladder position is to catch a debug line that
+    // is printed before telnet debugging can realistically be switched on.
+    {
+        char dlbuf[8];
+        sprintf(dlbuf, "%04X", getDownloadCode() & 0xFFFF);
+        outputStream->writeJsonTag("downloadCode",       dlbuf);
+        outputStream->writeJsonTag("downloadCodeSource", (m_iDlCodeIndex < 0) ? "override" : "ladder");
+        outputStream->writeJsonTag("downloadCodeTries",  m_iDlCodeAdvances);
+    }
     outputStream->writeJsonTag("alarmState",       alarmState);
     outputStream->writeJsonTag("alarmStateStr",    GetStrPmaxLogEvents(alarmState));
 

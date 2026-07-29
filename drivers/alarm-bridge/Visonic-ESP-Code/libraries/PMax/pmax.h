@@ -249,10 +249,9 @@ protected:
     int  m_iDlCodeIndex     = 0;
     // Number of times we have moved on to the next download code since init().
     int  m_iDlCodeAdvances  = 0;
-    // True between queueing a DL_START and receiving the 0x3C that answers it.
-    // Used so that an Access Denied is only attributed to DL_START and never to
-    // an arm/disarm (0xA1) that was rejected for a bad *user* PIN.
-    bool m_bDlStartPending  = false;
+    // Refusals seen for the current download code. The first DL_START of a connection
+    // is often refused regardless of the code, so we retry once before advancing.
+    int  m_iDlCodeRetry     = 0;
 
     // Panel capabilities, learned from the panel type in the 0x3C message.
     //   m_bAbSupported : panel understands 0xAB messages (ping / restore / enrol).
@@ -261,6 +260,9 @@ protected:
     //                    requiring the installer to do it from the panel keypad.
     bool m_bAbSupported     = true;
     bool m_bAutoEnrol       = false;
+    // Whether this panel type supports the INIT command. Only known once the 0x3C
+    // panel-info reply has arrived, which is why init() never sends INIT.
+    bool m_bInitSupported   = false;
 
     // Powerlink enrolment state.
     // m_bPowerlinkAlive goes true when the panel sends us its first AB 03 keep-alive,
@@ -272,6 +274,10 @@ protected:
     // panel to act on a partition that does not exist can get the whole command
     // refused with Access Denied.
     unsigned char m_partitionMask = 0x07;
+
+    // True when the panel actually uses partitions (EPROM PART_ENABLED).
+    // Partitioned panels send a different, untrustworthy A7 layout - see OnStatusChange.
+    bool m_bPartitionsEnabled = false;
 
     bool m_bPowerlinkAlive  = false;
     int  m_iEnrolAttempts   = 0;
@@ -431,8 +437,23 @@ protected:
 #define LOG_DEBUG   7
 #endif
 #define LOG_NO_FILTER 0
-#define DEBUG(x,...)     os_debugLog(x, false,__FUNCTION__,__LINE__,__VA_ARGS__);
-#define DEBUG_RAW(x,...) os_debugLog(x, true, __FUNCTION__,__LINE__,__VA_ARGS__);
+// On the ESP8266 a plain string literal is placed in DRAM, so every debug format
+// string costs RAM permanently whether or not it is ever printed. There are ~95 of
+// them in this library alone, which is several KB of heap given away for nothing.
+// PSTR() moves them into flash instead.
+//
+// The matching os_debugLog() implementation MUST then read the format with
+// vsnprintf_P() rather than vsnprintf(), because the pointer no longer points at
+// normal memory. Non-Arduino builds keep plain literals and plain vsnprintf().
+#ifdef ARDUINO
+  #include <pgmspace.h>
+  #define PM_LOG_FMT(f) PSTR(f)
+#else
+  #define PM_LOG_FMT(f) (f)
+#endif
+
+#define DEBUG(pri, fmt, ...)     os_debugLog(pri, false, __FUNCTION__, __LINE__, PM_LOG_FMT(fmt), ##__VA_ARGS__);
+#define DEBUG_RAW(pri, fmt, ...) os_debugLog(pri, true,  __FUNCTION__, __LINE__, PM_LOG_FMT(fmt), ##__VA_ARGS__);
 int log_console_setlogmask(int mask);
 
 bool os_pmComPortInit(const char* portName);
